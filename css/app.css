@@ -509,3 +509,54 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
 .archiv-liste li:first-child{border-top:0}
 .archiv-name{flex:1;min-width:0;font-size:var(--fs-sm);overflow-wrap:anywhere}
 @media (hover:hover){.archiv summary:hover{color:var(--ink);background:var(--hover)}}
+
+/* ---------- Rückblick ---------- */
+.rueckblick .kopf .chips{align-items:center}
+.rb-summe{color:var(--ink);font-weight:600}
+.rb-sektion{margin-top:var(--s6)}
+.rb-sektion > h2{font-size:var(--fs-base);margin-bottom:var(--s3)}
+.rb-sektion h3{font-size:var(--fs-sm);font-weight:600;margin-bottom:var(--s2)}
+.rb-tag{margin:var(--s4) 0 var(--s2);color:var(--muted)}
+.rb-leer{color:var(--muted);font-size:var(--fs-sm)}
+.rb-legende{margin:0 0 var(--s2);color:var(--muted);font-size:var(--fs-xs)}
+.rb-liste{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
+.rb-liste > li{display:grid;grid-template-columns:minmax(96px,1.2fr) minmax(80px,2fr) 72px 48px;align-items:center;column-gap:var(--s3);min-height:var(--h-zeile);padding:var(--s1) var(--s4);border-top:1px solid var(--line)}
+.rb-liste > li:first-child{border-top:0}
+.rb-liste > li:has(> details){display:block;padding:0}
+.rb-quest summary{display:grid;grid-template-columns:16px minmax(96px,1.2fr) minmax(80px,2fr) 72px 48px;align-items:center;column-gap:var(--s3);min-height:var(--h-zeile);padding:var(--s1) var(--s4) var(--s1) var(--s3);cursor:pointer;list-style:none}
+.rb-quest summary::-webkit-details-marker{display:none}
+.rb-quest summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--r-lg)}
+.rb-pfeil .i{width:16px;height:16px;color:var(--muted);transition:transform var(--dur-2) var(--ease-out)}
+.rb-quest[open] .rb-pfeil .i{transform:rotate(90deg)}
+.rb-name{display:flex;align-items:center;gap:var(--s2);min-width:0}
+.rb-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm)}
+.rb-balken{position:relative;display:block;height:8px;border-radius:var(--r-pill);background:var(--sunken);overflow:hidden}
+.rb-balken i{position:absolute;inset:0 auto 0 0;background:var(--q,var(--faint));border-radius:var(--r-pill);opacity:.55}
+.rb-balken b{position:absolute;inset:0 auto 0 0;background:var(--q,var(--ink));border-radius:var(--r-pill)}
+.rb-quests .rb-balken i{opacity:1}
+.rb-zahl{font-size:var(--fs-sm);font-weight:500;text-align:right;white-space:nowrap}
+.rb-pct{font-size:var(--fs-xs);color:var(--muted);text-align:right;white-space:nowrap}
+.rb-tasks{list-style:none;margin:0;padding:0 var(--s4) var(--s2) calc(var(--s3) + 16px + var(--s3) + 16px)}
+.rb-tasks li{display:flex;justify-content:space-between;gap:var(--s3);min-height:var(--h-sm);align-items:center;color:var(--muted);font-size:var(--fs-sm)}
+.rb-task{min-width:0;overflow-wrap:anywhere}
+.rb-kennzahlen{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s3);margin:0 0 var(--s5)}
+.rb-kennzahlen > div{padding:var(--s3) var(--s4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
+.rb-kennzahlen dt{color:var(--muted);font-size:var(--fs-xs);font-weight:500}
+.rb-kennzahlen dd{margin:var(--s1) 0 0;font-size:var(--fs-xl);font-weight:600}
+.rb-zwei{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:var(--s5);align-items:start}
+.rb-zwei .rb-balken{--q:var(--accent)}
+.rb-zwei .rb-liste > li{grid-template-columns:minmax(96px,1fr) minmax(64px,1fr) 64px 48px}
+.rb-titel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm)}
+.rb-eintrag .zeit-meta .dot{flex:none}
+@media (max-width:767.98px){
+  .rb-kennzahlen{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rb-zwei{grid-template-columns:minmax(0,1fr)}
+  .rb-zwei .rb-liste > li{grid-template-columns:minmax(0,1fr) 64px 44px}
+  .rb-liste > li{grid-template-columns:minmax(0,1fr) 64px 44px;padding:var(--s2) var(--s3);row-gap:var(--s1)}
+  .rb-liste > li .rb-balken{grid-column:1/-1;grid-row:2}
+  .rb-quest summary{grid-template-columns:16px minmax(0,1fr) 64px 44px;padding:var(--s2) var(--s3);row-gap:var(--s1)}
+  .rb-quest summary .rb-balken{grid-column:2/-1;grid-row:2}
+  .rb-tasks{padding-left:calc(var(--s3) + 16px + var(--s3))}
+  .zeit-meta{flex-wrap:wrap}
+  .rb-eintrag{flex-wrap:wrap}
+}
