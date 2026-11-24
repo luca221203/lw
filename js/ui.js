@@ -34,7 +34,7 @@ window.LW = window.LW || {};
   function dlg() { return $('#dlg'); }
   function openDlg(html, breit) {
     const d = dlg();
-    if (!d.open) vorherFokus = document.activeElement;
+    if (!d.open && !vorherFokus) vorherFokus = document.activeElement; // gesetzt = vorheriger Dialog schließt gerade erst
     d.className = breit ? 'breit' : '';
     d.innerHTML = html;
     if (!d.open) d.showModal();
@@ -48,6 +48,7 @@ window.LW = window.LW || {};
   }
   function aufraeumen() {
     const d = dlg();
+    if (d.open) return; // schon wieder geöffnet (Folgedialog direkt nach dem Schließen): neuen Inhalt behalten
     d.innerHTML = '';
     d.oncancel = null;
     delete d.dataset.pflicht;

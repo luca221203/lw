@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="LW">
-<link rel="stylesheet" href="css/app.css?v=2">
+<link rel="stylesheet" href="css/app.css?v=3">
 </head>
 <body>
 
@@ -29,6 +29,10 @@
   <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.75"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M10 8l-4 4 4 4M6 12h9"/></g></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2"/></g></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a.8.8 0 0 0 1.2.7l10.4-6.5a.8.8 0 0 0 0-1.4L9.2 4.8A.8.8 0 0 0 8 5.5z" fill="currentColor"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></g></symbol>
 </svg>
 
 <section class="login" id="login" hidden>
@@ -73,6 +77,7 @@
     <section class="side-quests" aria-labelledby="questsTitel">
       <h2 class="side-titel" id="questsTitel"><span>Quests</span><span>heute</span></h2>
       <ul class="quest-liste" id="questListe"></ul>
+      <button class="btn ghost neue-quest" id="neueQuest" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Quest anlegen</button>
     </section>
     <div class="side-fuss">
       <div class="nutzer"><span class="nutzer-name" id="userName"></span><span class="nutzer-mail" id="userMail"></span></div>
@@ -108,8 +113,10 @@
 <script src="js/config.js?v=2"></script>
 <script src="js/logic.js?v=2"></script>
 <script src="js/db.js?v=2"></script>
-<script src="js/ui.js?v=2"></script>
+<script src="js/ui.js?v=3"></script>
+<script src="js/dialoge.js?v=3"></script>
 <!-- Ansichten: js/views/*.js hier einbinden (vor app.js) -->
+<script src="js/views/heute.js?v=3"></script>
 <script src="js/app.js?v=2"></script>
 </body>
 </html>

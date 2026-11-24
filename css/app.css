@@ -260,6 +260,95 @@ dialog[open]::backdrop{animation:einblenden var(--dur-3) var(--ease-out)}
 #toast.fehler{background:var(--danger);border-color:var(--danger);color:var(--on-danger)}
 @media (max-width:767.98px){#toast{bottom:calc(var(--tab-h) + env(safe-area-inset-bottom) + 80px)}}
 
+/* ---------- Quests und Aufgaben (Heute, Dialoge) ---------- */
+/* Kürzel in Tasten: nur mit Tastatur sinnvoll */
+.btn kbd{margin-left:var(--s1);background:transparent}
+.btn.primary kbd{border-color:color-mix(in srgb,var(--on-accent) 45%,transparent);color:var(--on-accent)}
+@media (max-width:767.98px),(pointer:coarse){.btn kbd,.tasten-hilfe{display:none}}
+
+/* Metadaten-Etikett (z. B. Kunde) – ruhig, umrandet; .badge bleibt für Zustände */
+.tag{display:inline-flex;align-items:center;height:24px;max-width:100%;padding:0 var(--s2);border:1px solid var(--line);border-radius:var(--r-sm);font-size:var(--fs-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.quest-bloecke{display:flex;flex-direction:column;gap:var(--s4)}
+.qb{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--s3) var(--s2) var(--s2)}
+.qb-kopf{display:flex;align-items:center;gap:var(--s3);min-height:var(--h-sm);padding:0 var(--s1) 0 var(--s3)}
+.qb-name{font-size:var(--fs-base);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qb-meta{font-size:var(--fs-xs);color:var(--muted)}
+.qb-std{margin-left:auto;font-size:var(--fs-sm);font-weight:500;color:var(--muted);white-space:nowrap}
+.qb-aktionen{display:flex;gap:var(--s1)}
+.qb-balken{height:4px;margin:var(--s2) var(--s3) var(--s2);border-radius:var(--r-pill);background:var(--sunken);overflow:hidden}
+.qb-balken i{display:block;height:100%;background:var(--q,var(--faint));transform-origin:left center;transform:scaleX(0);transition:transform var(--dur-4) var(--ease-out)}
+.qb-leer{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s1);padding:0 var(--s3) var(--s1);color:var(--muted);font-size:var(--fs-sm)}
+.qb-leer .btn.link{color:var(--accent-text);padding:0 var(--s1)}
+
+.aufgaben{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.aufgabe{display:flex;align-items:center;gap:var(--s2);min-height:var(--h-zeile);padding:var(--s1) var(--s1) var(--s1) 0;border-radius:var(--r)}
+.aufgabe.gewaehlt{background:var(--hover)}
+.check{flex:none;display:grid;place-items:center;width:var(--h-sm);height:var(--h-sm);padding:0;border:0;background:none;border-radius:var(--r);cursor:pointer;color:var(--on-accent)}
+.check .ring{display:grid;place-items:center;width:20px;height:20px;border:2px solid var(--line-strong);border-radius:50%}
+.check svg{width:12px;height:12px;opacity:0}
+.check[aria-checked="true"] .ring{background:var(--q,var(--accent));border-color:var(--q,var(--accent))}
+.check[aria-checked="true"] svg{opacity:1}
+.aufgabe-text{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;column-gap:var(--s2);row-gap:var(--s1)}
+.aufgabe-titel{min-width:0;padding:var(--s1) 0;border:0;background:none;color:var(--ink);font-size:var(--fs-base);text-align:left;overflow-wrap:anywhere;border-radius:var(--r-sm);cursor:pointer}
+.aufgabe.fertig .aufgabe-titel{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--faint)}
+.aufgabe-meta{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2);min-width:0}
+.fokus-btn{flex:none;background:transparent;border-color:transparent;color:var(--muted)}
+.fokus-btn .i{width:16px;height:16px}
+.aufgabe.gewaehlt .fokus-btn{border-color:var(--line-strong);background:var(--raised);color:var(--ink)}
+.fokus-btn.laeuft-jetzt{border-color:var(--line-strong);color:var(--ink)}
+.fokus-btn .punkt{width:8px;height:8px;border-radius:50%;background:var(--q,var(--accent))}
+@media (hover:hover){
+  .aufgabe:hover{background:var(--hover)}
+  .aufgabe:hover .fokus-btn{border-color:var(--line-strong);background:var(--raised);color:var(--ink)}
+  .check:hover .ring{border-color:var(--q,var(--accent))}
+}
+@media (max-width:767.98px),(pointer:coarse){
+  .fokus-btn{border-color:var(--line-strong);background:var(--raised);color:var(--ink)}
+}
+.tasten-hilfe{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s1);margin-top:var(--s5);color:var(--muted);font-size:var(--fs-xs)}
+
+/* Seitenleiste: Neue Quest */
+.neue-quest{justify-content:flex-start;gap:var(--s3);width:100%;height:var(--h-zeile);margin-top:var(--s1);padding:0 var(--s3)}
+
+/* Dialog-Bausteine */
+.f-gruppe{display:flex;flex-direction:column;gap:var(--s2)}
+.feld-reihe{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)}
+@media (max-width:767.98px){.feld-reihe{grid-template-columns:1fr}}
+fieldset.f{border:0;margin:0;padding:0}
+fieldset.f legend{padding:0;margin-bottom:var(--s2)}
+.farb-reihe{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.farbe{position:relative;display:grid;place-items:center;width:var(--h-sm);height:var(--h-sm);border-radius:50%;cursor:pointer}
+.farbe input{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer}
+.farbe span{width:24px;height:24px;border-radius:50%;background:var(--q)}
+.farbe:has(input:checked) span{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--q)}
+.farbe:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.schalter{display:flex;align-items:flex-start;gap:var(--s3);cursor:pointer}
+.schalter input{appearance:none;-webkit-appearance:none;position:relative;flex:none;width:40px;height:24px;margin:0;padding:0;border:0;border-radius:var(--r-pill);background:var(--line-strong);cursor:pointer}
+.schalter input::before{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#FFFFFF;transition:transform var(--dur-2) var(--ease-out)}
+.schalter input:checked{background:var(--accent)}
+.schalter input:checked::before{transform:translateX(16px)}
+.schalter input:focus{box-shadow:none}
+.schalter input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.schalter-text{display:flex;flex-direction:column;font-size:var(--fs-sm)}
+.schalter-text strong{font-weight:500}
+.schalter-text .sub{margin-top:0}
+.meldung.warn{background:var(--warn-wash);color:var(--warn)}
+.dlg .aktionen-links{display:flex;gap:var(--s1);margin-right:auto;margin-left:calc(-1 * var(--s3))}
+.dlg .aktionen-links .btn{padding:0 var(--s3)}
+dialog.seitlich .aktionen-links{order:1;flex-basis:100%}
+.btn.ghost.gefahr{color:var(--danger)}
+@media (hover:hover){.btn.ghost.gefahr:hover{color:var(--danger);background:var(--danger-wash)}}
+
+/* Seitliches Panel (Slide-over) für Quest- und Aufgaben-Dialog: Heute bleibt daneben sichtbar */
+dialog.seitlich{position:fixed;inset:0 0 0 auto;margin:0;width:min(440px,100vw);height:100dvh;max-width:none;max-height:none;border-width:0 0 0 1px;border-radius:0}
+dialog.seitlich[open]{animation:von-rechts var(--dur-4) var(--ease-out)}
+dialog.seitlich .dlg{min-height:100%;display:flex;flex-direction:column;padding-bottom:calc(var(--s5) + env(safe-area-inset-bottom))}
+dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
+@keyframes von-rechts{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+.entwurf{display:flex;align-items:center;justify-content:space-between;gap:var(--s2);flex-wrap:wrap}
+.entwurf .btn.link{color:inherit;text-decoration:underline;padding:0}
+
 /* ---------- Weniger Bewegung: sofort statt gleiten ---------- */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
