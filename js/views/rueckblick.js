@@ -13,7 +13,7 @@ window.LW = window.LW || {};
   const ISO = /^\d{4}-\d{2}-\d{2}$/;
   const lang = (iso, o) => datum(iso).toLocaleDateString('de-DE', o);
 
-  let main = null, modus = 'tag', anker = null, daten = null;
+  let main = null, modus = 'tag', anker = null, daten = null, ladeNr = 0;
 
   const bereich = () => modus === 'woche'
     ? (t => [t[0], t[6]])(L.wochenTage(anker))
@@ -40,12 +40,10 @@ window.LW = window.LW || {};
 
   function bereitstellen() {
     const S = app.S, [von, bis] = bereich();
-    let liste = daten && daten.key === von + bis ? daten.liste.slice() : null;
-    if (!liste) return null;
-    if (S.laufend && !liste.some(z => z.id === S.laufend.id)) {
-      const t = L.isoTag(new Date(S.laufend.start));
-      if (t >= von && t <= bis) liste.push(S.laufend);
-    }
+    if (!daten || daten.key !== von + bis) return null;
+    const imBereich = z => { const t = L.isoTag(new Date(z.start)); return t >= von && t <= bis; };
+    const liste = daten.liste.filter(imBereich);
+    if (S.laufend && imBereich(S.laufend) && !liste.some(z => z.id === S.laufend.id)) liste.push(S.laufend);
     return liste;
   }
 
@@ -138,8 +136,8 @@ window.LW = window.LW || {};
     } else {
       const eigene = alle.filter(z => z.user_id === S.ich.id);
       const r = L.rueckblick(eigene, S.quests, S.tasks, S.kunden, von, bis, jetzt);
-      const hatFirma = S.quests.some(q => q.firma && !q.archiviert);
-      const f = hatFirma ? L.rueckblick(alle, S.quests, S.tasks, S.kunden, von, bis, jetzt).firma : null;
+      const fAlle = L.rueckblick(alle, S.quests, S.tasks, S.kunden, von, bis, jetzt).firma;
+      const f = S.quests.some(q => q.firma) || fAlle.gesamtSek > 0 ? fAlle : null;
       const leer = !alle.some(z => S.quests.some(q => q.id === z.quest_id));
       if (leer) {
         inhalt = `<div class="leer"><strong>${modus === 'woche' ? 'In dieser Woche' : 'An diesem Tag'} ist noch keine Zeit erfasst.</strong><span>Starte in Heute einen Timer oder trage Zeit nach.</span></div>`;
@@ -160,7 +158,7 @@ window.LW = window.LW || {};
             <button class="chip" type="button" data-aktion="modus" data-wert="woche" aria-pressed="${modus === 'woche'}">Woche</button>
           </div>
           <div class="woche-nav" role="group" aria-label="Zeitraum wechseln">
-            <button class="btn icon" type="button" data-aktion="zurueck" aria-label="${modus === 'woche' ? 'Vorige Woche' : 'Voriger Tag'}" data-tip="${modus === 'woche' ? 'Vorige Woche' : 'Voriger Tag'}">${icon('i-links')}</button>
+            <button class="btn icon tip-links" type="button" data-aktion="zurueck" aria-label="${modus === 'woche' ? 'Vorige Woche' : 'Voriger Tag'}" data-tip="${modus === 'woche' ? 'Vorige Woche' : 'Voriger Tag'}">${icon('i-links')}</button>
             <button class="btn" type="button" data-aktion="heute"${aktuell ? ' aria-current="date"' : ''}>Heute</button>
             <button class="btn icon tip-links" type="button" data-aktion="vor" aria-label="${modus === 'woche' ? 'Nächste Woche' : 'Nächster Tag'}" data-tip="${modus === 'woche' ? 'Nächste Woche' : 'Nächster Tag'}">${icon('i-rechts')}</button>
           </div>
@@ -171,15 +169,15 @@ window.LW = window.LW || {};
   }
 
   async function laden() {
-    const [von, bis] = bereich(), key = von + bis;
+    const [von, bis] = bereich(), key = von + bis, nr = ++ladeNr;
     try {
       const liste = await DB.zeiten(von, bis);
-      if (!main || key !== bereich().join('')) return;
+      if (!main || nr !== ladeNr) return;
       daten = { key, liste };
       A.neuZeichnenMitFokus(main, zeichnen);
     } catch (e) {
       console.warn('Rückblick nicht geladen', e);
-      if (main && key === bereich().join('')) {
+      if (main && nr === ladeNr) {
         main.innerHTML = `<div class="seite"><div class="leer"><strong>Der Rückblick konnte nicht geladen werden.</strong><span>${esc(LW.ui.fehlerText(e))}</span><button class="btn" type="button" data-aktion="neu">Erneut laden</button></div></div>`;
       }
     }
@@ -219,7 +217,7 @@ window.LW = window.LW || {};
       }
       case 'zeit': {
         const z = daten && daten.liste.find(x => x.id === el.dataset.id);
-        if (z && z.user_id === app.S.ich.id) LW.zeiten.dialog(z);
+        if (z && z.ende && z.user_id === app.S.ich.id && !LW.zeiten.gesperrt(z)) LW.zeiten.dialog(z);
         break;
       }
       case 'neu': laden(); break;
@@ -232,7 +230,8 @@ window.LW = window.LW || {};
       main = m;
       const p = (param || '').split('/');
       modus = p[0] === 'woche' ? 'woche' : 'tag';
-      const roh = p[1] && ISO.test(p[1]) ? p[1] : heuteIso();
+      const echt = iso => ISO.test(iso || '') && L.isoTag(datum(iso)) === iso;
+      const roh = echt(p[1]) ? p[1] : heuteIso();
       anker = modus === 'woche' ? L.wochenTage(roh)[0] : roh;
       daten = null;
       zeichnen();
