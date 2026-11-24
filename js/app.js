@@ -65,7 +65,8 @@ window.LW = window.LW || {};
     const h = location.hash.slice(1);
     const i = h.indexOf('/');
     const view = i < 0 ? h : h.slice(0, i);
-    const param = i < 0 ? null : decodeURIComponent(h.slice(i + 1)) || null;
+    let param = null;
+    if (i >= 0) { try { param = decodeURIComponent(h.slice(i + 1)) || null; } catch (e) { param = null; } }
     return views[view] ? { view, param } : null;
   }
   function hashVon(view, param) { return '#' + view + (param ? '/' + encodeURIComponent(param) : ''); }
@@ -91,9 +92,27 @@ window.LW = window.LW || {};
     const v = views[S.view];
     document.title = v.titel + ' · LW';
     $('#topTitel').textContent = v.titel;
+    rendern();
+    const main = $('#main');
+    main.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }
+
+  /* Vertrag für Ansichten: render(main, param) baut neu auf; Ereignisse über main.onclick/oninput/onchange
+     (werden hier zurückgesetzt) oder selbst in destroy() aufräumen (Intervalle, document-Listener).
+     Optional aktualisieren(): Daten in S haben sich geändert – Ansicht frisch zeichnen ohne Fokus/Scroll zu verlieren. */
+  let aktiv = null; // gerade gerenderte Ansicht
+  function abbauen() {
+    const v = aktiv; aktiv = null;
+    if (v && typeof v.destroy === 'function') { try { v.destroy(); } catch (e) { console.error(e); } }
     const main = $('#main');
     main.onclick = null; main.oninput = null; main.onchange = null;
     main.innerHTML = '';
+  }
+  function rendern() {
+    abbauen();
+    const v = views[S.view], main = $('#main');
+    aktiv = v;
     try { v.render(main, S.param); }
     catch (e) {
       console.error(e);
@@ -102,8 +121,21 @@ window.LW = window.LW || {};
       main.querySelector('[data-neu]').onclick = () => location.reload();
     }
     chip();
-    main.focus({ preventScroll: true });
-    window.scrollTo(0, 0);
+  }
+
+  /* Aktuelle Ansicht nach Datenänderung neu zeigen – ohne Scroll- oder Fokus-Sprung. */
+  function neuZeichnen() {
+    if (!S.ich || !aktiv) return;
+    if (typeof aktiv.aktualisieren === 'function') {
+      try { aktiv.aktualisieren(); } catch (e) { console.error(e); }
+      chip();
+      return;
+    }
+    const y = window.scrollY;
+    const fokusId = document.activeElement && document.activeElement.id;
+    rendern();
+    window.scrollTo(0, y);
+    if (fokusId) { const el = document.getElementById(fokusId); if (el && $('#main').contains(el)) el.focus({ preventScroll: true }); }
   }
 
   /* ---------- Seitenleiste und „Läuft gerade“ ---------- */
@@ -142,27 +174,35 @@ window.LW = window.LW || {};
     el.setAttribute('aria-label', 'Läuft gerade: ' + titel + ', ' + zeit + '. Fokus öffnen');
   }
 
-  let tick = null, ticks = 0;
+  let tick = null, ticks = 0, tagStand = null;
   function uhrStarten() {
     if (tick) return;
+    tagStand = L.isoTag(new Date());
     tick = setInterval(() => {
+      ticks++;
+      if (ticks % 60 === 0 && L.isoTag(new Date()) !== tagStand) { abgleichen(); return; } // neuer Tag
       if (!S.laufend) return;
       chip();
-      if (++ticks % 30 === 0) questListe();
+      if (ticks % 30 === 0) questListe();
     }, 1000);
   }
   function uhrStoppen() { clearInterval(tick); tick = null; }
 
-  /* Zurück in den Tab: laufenden Timer abgleichen (anderes Gerät könnte ihn gestoppt haben). */
-  document.addEventListener('visibilitychange', async () => {
-    if (document.hidden || !S.ich) return;
+  /* Laufenden Timer und heutige Zeiten neu holen: beim Zurückkehren in den Tab
+     (anderes Gerät könnte den Timer gestoppt haben) und beim Tageswechsel. */
+  async function abgleichen() {
+    if (!S.ich) return;
     try {
       const heute = L.isoTag(new Date());
       const [laufend, zeitenHeute] = await Promise.all([DB.laufend(), DB.zeiten(heute, heute)]);
+      if (!S.ich) return;
+      tagStand = heute;
       Object.assign(S, { laufend, zeitenHeute });
       rahmen();
+      neuZeichnen();
     } catch (e) { console.warn('Abgleich fehlgeschlagen', e); }
-  });
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) abgleichen(); });
 
   /* ---------- Handy-Menü (Seitenleiste von links) ---------- */
   const side = $('#side'), schleier = $('#schleier'), menuKnopf = $('#menuAuf');
@@ -296,12 +336,16 @@ window.LW = window.LW || {};
       if (f.p1.value && f.p1.value.length < 8) { fehlerEl.textContent = 'Das Passwort ist zu kurz. Bitte mindestens 8 Zeichen verwenden.'; feldFehler(f.p1, true); }
     });
     f.addEventListener('input', e => { if (e.target.getAttribute('aria-invalid')) { feldFehler(e.target, false); fehlerEl.textContent = ''; } });
+    let speichert = false;
     f.onsubmit = async e => {
       e.preventDefault();
+      if (speichert) return;
       if (f.p1.value.length < 8) return zeige('Das Passwort ist zu kurz. Bitte mindestens 8 Zeichen verwenden.', f.p1);
       if (f.p1.value !== f.p2.value) return zeige('Die beiden Passwörter stimmen nicht überein.', f.p2);
+      speichert = true;
       try { await DB.passwortSetzen(f.p1.value); }
       catch (err) { return zeige(fehlerText(err), f.p1); }
+      finally { speichert = false; }
       closeDlg();
       toast('Passwort gespeichert');
     };
@@ -320,8 +364,10 @@ window.LW = window.LW || {};
   async function zeigeApp(session) {
     if (!session) {
       aktiverNutzer = null;
-      Object.assign(S, { ich: null, laufend: null, view: null });
+      abbauen();
+      Object.assign(S, { ich: null, profile: [], quests: [], tasks: [], kunden: [], laufend: null, zeitenHeute: [], view: null, param: null });
       uhrStoppen(); menuZu(false); closeDlg();
+      $('#questListe').innerHTML = ''; $('#laeuft').hidden = true;
       $('#app').hidden = true; $('#login').hidden = false;
       $('#loginDemo').hidden = !DB.demo;
       if (DB.demo && !form.email.value) { form.email.value = 'luca@lw.demo'; form.password.value = 'demo'; }
@@ -350,7 +396,7 @@ window.LW = window.LW || {};
     linkPruefen();
   }
 
-  Object.assign(app, { S, laden, go, rahmen, stundenHeute, zeigen });
+  Object.assign(app, { S, laden, go, rahmen, stundenHeute, zeigen, neuZeichnen, abgleichen });
 
   /* ---------- Start: nach allen Skripten, damit Ansichten registriert sind ---------- */
   function start() {
