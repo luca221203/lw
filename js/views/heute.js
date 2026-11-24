@@ -71,25 +71,7 @@ window.LW = window.LW || {};
   app.erledigt = () => { const t = auswahl(); if (t) erledigtUmschalten(t); };
 
   /* ---------- Darstellung ---------- */
-  function zeile(t, q, heute) {
-    const S = app.S;
-    const fertig = !!t.erledigt_am;
-    const kunde = t.kunde_id && (S.kunden.find(k => k.id === t.kunde_id) || {}).name;
-    const laeuft = S.laufend && S.laufend.task_id === t.id;
-    const meta = (L.istUeberfaellig(t, heute) ? '<span class="badge warn">überfällig</span>' : '') +
-      (kunde ? `<span class="tag">${esc(kunde)}</span>` : '');
-    const titel = esc(t.titel);
-    return `<li class="aufgabe${fertig ? ' fertig' : ''}${t.id === gewaehlt ? ' gewaehlt' : ''}" data-id="${esc(t.id)}">
-      <button class="check" type="button" role="checkbox" aria-checked="${fertig}" data-aktion="erledigt" aria-label="${titel} erledigt"><span class="ring"><svg aria-hidden="true"><use href="#i-check"/></svg></span></button>
-      <div class="aufgabe-text">
-        <button class="aufgabe-titel" type="button" data-aktion="bearbeiten" aria-label="${titel} bearbeiten">${titel}</button>
-        ${meta ? `<span class="aufgabe-meta">${meta}</span>` : ''}
-      </div>
-      ${fertig ? '' : laeuft
-        ? `<button class="btn small fokus-btn laeuft-jetzt" type="button" data-aktion="fokus" aria-label="Läuft – Fokus öffnen: ${titel}"><span class="punkt" aria-hidden="true"></span>Läuft</button>`
-        : `<button class="btn small fokus-btn" type="button" data-aktion="fokus" aria-label="Fokus starten: ${titel}">${icon('i-play')}Fokus</button>`}
-    </li>`;
-  }
+  const zeile = (t, heute) => LW.aufgaben.zeile(t, { gewaehlt, heute });
 
   function block(b, heute) {
     const q = b.quest, name = esc(q.name), id = esc(q.id);
@@ -106,7 +88,7 @@ window.LW = window.LW || {};
       </header>
       <div class="qb-balken" aria-hidden="true"><i data-balken="${id}"></i></div>
       ${b.tasks.length
-        ? `<ul class="aufgaben">${b.tasks.map(t => zeile(t, q, heute)).join('')}</ul>`
+        ? `<ul class="aufgaben">${b.tasks.map(t => zeile(t, heute)).join('')}</ul>`
         : `<p class="qb-leer"><span>Nichts für heute</span><button class="btn link small" type="button" data-aktion="neu" data-quest="${id}">Aufgabe hinzufügen</button></p>`}
     </section>`;
   }

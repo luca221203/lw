@@ -403,3 +403,109 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
 .feld-reihe.immer{grid-template-columns:1fr 1fr}
 .dauer-anzeige{margin-top:calc(-1 * var(--s2));color:var(--muted);font-size:var(--fs-sm)}
 .dauer-anzeige:empty{display:none}
+
+/* ---------- Aufgaben-Zeile: Zusatz-Tasten (Woche, Backlog) ---------- */
+.aufgabe-aktionen{flex:none;display:flex;align-items:center;gap:var(--s1)}
+.zeile-knopf{color:var(--muted);gap:var(--s1);padding:0 var(--s2)}
+.zeile-knopf .i{width:16px;height:16px}
+.zeile-knopf[aria-expanded="true"]{background:var(--hover);color:var(--ink)}
+.aufgabe-quest{display:inline-flex;align-items:center;gap:var(--s1);min-width:0;font-size:var(--fs-xs);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Auswahl-Menü am Knopf (Tag, Zuweisen) – Popover */
+.menue{position:fixed;inset:auto;margin:0;min-width:208px;max-width:calc(100vw - 16px);max-height:min(440px,calc(100dvh - 16px));overflow:auto;padding:var(--s1);border:1px solid var(--line);border-radius:var(--r-lg);background:var(--surface);color:var(--ink);box-shadow:var(--shadow-pop)}
+.menue:popover-open{animation:menue-auf var(--dur-2) var(--ease-out)}
+.menue button{display:flex;align-items:center;gap:var(--s2);width:100%;min-height:var(--h-zeile);padding:0 var(--s3) 0 var(--s2);border:0;border-radius:var(--r-sm);background:none;font-size:var(--fs-sm);text-align:left;cursor:pointer}
+.menue button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.menue button:focus{background:var(--hover)}
+.menue-haken{width:16px;height:16px;flex:none;color:var(--accent-text);visibility:hidden}
+.menue [aria-checked="true"] .menue-haken{visibility:visible}
+.menue [aria-checked="true"] .menue-text{font-weight:600}
+.menue-hinweis{margin-left:auto;padding-left:var(--s4);color:var(--muted);font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
+.menue hr{border:0;border-top:1px solid var(--line);margin:var(--s1) 0}
+@media (hover:hover){.menue button:hover{background:var(--hover)}}
+@keyframes menue-auf{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+/* ---------- Woche ---------- */
+@media (min-width:768px){main:has(> .seite.breit){padding-left:var(--s5);padding-right:var(--s5)}}
+.woche-steuerung{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s3) var(--s5)}
+.woche-alle{align-items:center}
+.woche-nav{display:flex;gap:var(--s1)}
+.woche-brett{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:var(--s3);align-items:start}
+/* 7 Spalten; wird es zu schmal, scrollt nur das Brett seitlich (nie die Seite) */
+.woche-tage{display:grid;grid-template-columns:repeat(7,minmax(96px,1fr));gap:var(--s2);overflow-x:auto;padding:2px;margin:-2px}
+.tag-spalte{display:flex;flex-direction:column;gap:var(--s1);min-width:0;min-height:256px;padding:var(--s2) var(--s1);border:1px solid transparent;border-radius:var(--r-lg);background:var(--sunken)}
+.tag-spalte.ist-heute{border-color:var(--accent)}
+.tag-spalte.drop-ziel{border-color:var(--accent);border-style:dashed;background:var(--accent-wash)}
+.tag-kopf{display:flex;align-items:center;flex-wrap:wrap;column-gap:var(--s1);padding-left:var(--s2)}
+.tag-kopf h2{display:flex;align-items:baseline;flex-wrap:wrap;column-gap:var(--s1);flex:1;min-width:0;font-size:var(--fs-sm)}
+.tag-kopf .btn{margin:calc(-1 * var(--s1)) 0}
+.tag-datum{color:var(--muted);font-weight:500}
+.ist-heute .tag-name{color:var(--accent-text)}
+.vorbei .tag-name{color:var(--muted)}
+.tag-std{order:3;flex-basis:100%;min-height:18px;color:var(--muted);font-size:var(--fs-xs);font-weight:500;line-height:18px;white-space:nowrap}
+.ohne-tag .tag-std{order:0;flex-basis:auto;padding-right:var(--s2)}
+.ohne-tag .tag-kopf{min-height:var(--h-sm)}
+.spalte-leer{padding:0 var(--s2);color:var(--muted);font-size:var(--fs-xs)}
+.tag-spalte .aufgaben{gap:var(--s1)}
+/* Kompakte Karte: Titel, darunter die Quest. Tag-Taste schwebt bei Hover/Tastaturfokus ein (Maus), sonst sichtbar. */
+.tag-spalte .aufgabe{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:0;min-height:0;padding:var(--s1) var(--s2);border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.tag-spalte .aufgabe-text{display:contents}
+.tag-spalte .aufgabe-titel{font-size:var(--fs-sm);line-height:1.35}
+.tag-spalte .aufgabe-meta{overflow:hidden;gap:var(--s1);padding-bottom:var(--s1)}
+.tag-spalte .aufgabe-meta .tag{height:20px;padding:0 var(--s1)}
+.tag-spalte .aufgabe-aktionen{position:absolute;right:var(--s1);bottom:var(--s1);border-radius:var(--r);background:var(--surface);opacity:0}
+.tag-spalte .aufgabe:hover .aufgabe-aktionen,.tag-spalte .aufgabe:focus-within .aufgabe-aktionen{opacity:1}
+.tag-spalte .aufgabe[draggable="true"]{cursor:grab}
+.tag-spalte .aufgabe.zieht{opacity:.5}
+@media (hover:hover){.tag-spalte .aufgabe:hover{border-color:var(--line-strong)}}
+@media (max-width:767.98px),(pointer:coarse){
+  .tag-spalte .aufgabe{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"titel aktionen" "meta aktionen";align-items:center;column-gap:var(--s1)}
+  .tag-spalte .aufgabe-titel{grid-area:titel}
+  .tag-spalte .aufgabe-meta{grid-area:meta}
+  .tag-spalte .aufgabe-aktionen{grid-area:aktionen;position:static;opacity:1}
+}
+@media (max-width:767.98px){
+  .woche-brett,.woche-tage{grid-template-columns:minmax(0,1fr)}
+  .woche-tage,.woche-brett{gap:var(--s3)}
+  .woche-tage{overflow:visible}
+  .tag-spalte{min-height:0;padding:var(--s2)}
+  .tag-kopf{min-height:var(--h-sm)}
+  .tag-std{order:0;flex-basis:auto;padding-right:var(--s2)}
+  .tag-spalte .aufgabe{padding-left:var(--s3)}
+  .tag-spalte .aufgabe-titel{font-size:var(--fs-base)}
+  .spalte-leer{padding-bottom:var(--s1)}
+}
+
+/* ---------- Backlog ---------- */
+.filter{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s3);margin-bottom:var(--s5)}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.chips + .chips{padding-left:var(--s3);border-left:1px solid var(--line)}
+.chip{display:inline-flex;align-items:center;gap:var(--s2);height:var(--h-sm);padding:0 var(--s3);border:1px solid var(--line-strong);border-radius:var(--r-pill);background:var(--raised);color:var(--muted);font-size:var(--fs-sm);font-weight:500;white-space:nowrap;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+@media (hover:hover){.chip:hover{border-color:var(--faint);color:var(--ink)}.chip[aria-pressed="true"]:hover{border-color:var(--ink);color:var(--bg)}}
+.backlog .aufgabe{flex-wrap:wrap}
+/* Schnell-Tasten bündig untereinander: Tag | Person | Fokus */
+.backlog .aufgabe-aktionen{display:grid;grid-template-columns:120px 112px auto;justify-items:start}
+.backlog .zeile-knopf{max-width:100%}
+.backlog .zeile-knopf span{overflow:hidden;text-overflow:ellipsis}
+@media (max-width:767.98px){
+  .filter{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s2)}
+  .chips{flex-wrap:nowrap;overflow-x:auto;margin:0 calc(-1 * var(--s4));padding:0 var(--s4);scrollbar-width:none}
+  .chips + .chips{padding-left:var(--s4);border-left:0}
+  .chips::-webkit-scrollbar{display:none}
+  .backlog .aufgabe-aktionen{display:flex;width:100%;min-width:0;padding-left:var(--h-sm);margin-top:calc(-1 * var(--s1))}
+  .backlog .zeile-knopf{min-width:0;flex-shrink:1}
+  .backlog .fokus-btn{margin-left:auto}
+}
+
+/* Archiviert (zugeklappt) */
+.archiv{margin-top:var(--s7);border-top:1px solid var(--line);padding-top:var(--s4)}
+.archiv summary{display:flex;align-items:center;gap:var(--s2);min-height:var(--h-zeile);width:max-content;padding:0 var(--s2);margin-left:calc(-1 * var(--s2));border-radius:var(--r);font-size:var(--fs-sm);font-weight:500;color:var(--muted);cursor:pointer}
+.archiv[open] summary{color:var(--ink)}
+.archiv > .sub{margin:var(--s1) 0 var(--s4)}
+.archiv h3{font-size:var(--fs-sm);font-weight:600;margin:var(--s4) 0 var(--s2)}
+.archiv-liste{list-style:none;margin:0;padding:0 var(--s2) 0 var(--s4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
+.archiv-liste li{display:flex;align-items:center;gap:var(--s3);min-height:var(--h-zeile);padding:var(--s1) 0;border-top:1px solid var(--line)}
+.archiv-liste li:first-child{border-top:0}
+.archiv-name{flex:1;min-width:0;font-size:var(--fs-sm);overflow-wrap:anywhere}
+@media (hover:hover){.archiv summary:hover{color:var(--ink);background:var(--hover)}}

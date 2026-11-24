@@ -20,6 +20,15 @@ window.LW = window.LW || {};
     return tage;
   }
 
+  /* ISO-Kalenderwoche (Woche beginnt Montag; KW 1 enthält den ersten Donnerstag). */
+  function kalenderwoche(iso) {
+    var teile = iso.split('-');
+    var d = new Date(Date.UTC(+teile[0], +teile[1] - 1, +teile[2]));
+    d.setUTCDate(d.getUTCDate() + 3 - (d.getUTCDay() + 6) % 7); /* Donnerstag derselben Woche */
+    var jan1 = Date.UTC(d.getUTCFullYear(), 0, 1);
+    return 1 + Math.floor((d.getTime() - jan1) / 864e5 / 7);
+  }
+
   /* Ganze Sekunden zwischen start und ende (oder jetzt, wenn die Zeit läuft). */
   function dauerSek(zeit, jetzt) {
     var ende = zeit.ende ? new Date(zeit.ende) : jetzt;
@@ -155,7 +164,7 @@ window.LW = window.LW || {};
     return zeit.ende == null && dauerSek(zeit, jetzt) > 12 * 3600;
   }
 
-  window.LW.logic = { isoTag: isoTag, wochenTage: wochenTage, dauerSek: dauerSek, formatDauer: formatDauer, formatTimer: formatTimer,
+  window.LW.logic = { isoTag: isoTag, wochenTage: wochenTage, kalenderwoche: kalenderwoche, dauerSek: dauerSek, formatDauer: formatDauer, formatTimer: formatTimer,
     heuteAnsicht: heuteAnsicht, istUeberfaellig: istUeberfaellig, backlog: backlog,
     summeProQuest: summeProQuest, rueckblick: rueckblick, laufendZuLange: laufendZuLange };
 })();

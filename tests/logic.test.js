@@ -11,6 +11,12 @@
   t('wochenTage Sonntag gehört zur Woche ab Montag', function () {
     eq(L().wochenTage('2026-11-29')[0], '2026-11-23');
   });
+  t('kalenderwoche ISO (Montag-Start)', function () {
+    eq(L().kalenderwoche('2026-11-23'), 48);
+    eq(L().kalenderwoche('2026-01-01'), 1);
+    eq(L().kalenderwoche('2026-12-31'), 53);
+    eq(L().kalenderwoche('2027-01-01'), 53);
+  });
   t('dauerSek abgeschlossen', function () {
     eq(L().dauerSek({ start: '2026-11-24T08:00:00Z', ende: '2026-11-24T09:30:15Z' }, new Date()), 5415);
   });
