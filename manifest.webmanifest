@@ -1,0 +1,15 @@
+{
+  "name": "LW",
+  "short_name": "LW",
+  "description": "Quests, Aufgaben und getrackte Zeit",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#141417",
+  "theme_color": "#141417",
+  "icons": [
+    { "src": "img/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "img/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

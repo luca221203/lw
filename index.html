@@ -2,11 +2,114 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
 <title>LW</title>
+<script>try{var t=localStorage.getItem("lw-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="icon" type="image/svg+xml" href="img/icon.svg?v=1">
+<link rel="apple-touch-icon" href="img/icon.png?v=1">
+<link rel="manifest" href="manifest.webmanifest?v=1">
+<meta name="theme-color" content="#F6F6F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141417" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="LW">
+<link rel="stylesheet" href="css/app.css?v=1">
 </head>
 <body>
-<h1>LW</h1>
-<p>Grundgerüst – die Oberfläche folgt.</p>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" style="fill:var(--accent)"/><g fill="none" style="stroke:var(--on-accent)" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"><path d="M118 166V346H196"/><path d="M238 166L280 346L321 236L362 346L404 166"/></g></symbol>
+  <symbol id="i-heute" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g></symbol>
+  <symbol id="i-woche" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></g></symbol>
+  <symbol id="i-backlog" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16M4 12h16M4 17.5h10"/></g></symbol>
+  <symbol id="i-rueckblick" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M5 20v-7M10 20V5M15 20v-9M20 20V9"/></g></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.75"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h3.5A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5H14"/><path d="M10 8l-4 4 4 4M6 12h9"/></g></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2"/></g></symbol>
+</svg>
+
+<section class="login" id="login" hidden>
+  <form id="loginForm" class="login-karte" novalidate>
+    <svg class="logo logo-gross" aria-hidden="true"><use href="#i-logo"/></svg>
+    <h1>Anmelden</h1>
+    <p class="sub">Mit deinem Mediawo-Konto.</p>
+    <p class="demo-badge" id="loginDemo" hidden>Demo-Modus: Beispieldaten, nichts wird gespeichert.</p>
+    <div class="stack">
+      <label class="f">E-Mail
+        <input name="email" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+      </label>
+      <label class="f">Passwort
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <p class="meldung" id="loginMeldung" role="status" aria-live="polite" hidden></p>
+      <button class="btn primary voll" type="submit" id="loginBtn">Anmelden</button>
+      <button class="btn link" type="button" id="pwForgot">Passwort vergessen?</button>
+    </div>
+  </form>
+</section>
+
+<div class="app" id="app" hidden>
+  <header class="topbar">
+    <svg class="logo" aria-hidden="true"><use href="#i-logo"/></svg>
+    <span class="topbar-titel" id="topTitel"></span>
+    <button class="btn icon ghost tip-unten tip-links" id="menuAuf" type="button" aria-label="Menü öffnen" data-tip="Menü öffnen" aria-expanded="false" aria-controls="side"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
+  </header>
+
+  <aside class="side" id="side" aria-label="Seitenleiste">
+    <div class="side-kopf">
+      <a class="marke" href="#heute"><svg class="logo" aria-hidden="true"><use href="#i-logo"/></svg><span>LW</span></a>
+      <button class="btn icon ghost side-zu tip-unten tip-links" id="menuZu" type="button" aria-label="Menü schließen" data-tip="Menü schließen" data-kbd="Esc"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <p class="demo-badge" id="demoBadge" hidden>Demo – Beispieldaten, nichts wird gespeichert.</p>
+    <nav class="nav" aria-label="Ansichten">
+      <a href="#heute" data-view="heute"><svg class="i" aria-hidden="true"><use href="#i-heute"/></svg>Heute</a>
+      <a href="#woche" data-view="woche"><svg class="i" aria-hidden="true"><use href="#i-woche"/></svg>Woche</a>
+      <a href="#backlog" data-view="backlog"><svg class="i" aria-hidden="true"><use href="#i-backlog"/></svg>Backlog</a>
+      <a href="#rueckblick" data-view="rueckblick"><svg class="i" aria-hidden="true"><use href="#i-rueckblick"/></svg>Rückblick</a>
+    </nav>
+    <section class="side-quests" aria-labelledby="questsTitel">
+      <h2 class="side-titel" id="questsTitel"><span>Quests</span><span>heute</span></h2>
+      <ul class="quest-liste" id="questListe"></ul>
+    </section>
+    <div class="side-fuss">
+      <div class="nutzer"><span class="nutzer-name" id="userName"></span><span class="nutzer-mail" id="userMail"></span></div>
+      <div class="side-aktionen">
+        <button class="btn icon ghost tip-start" id="themeToggle" type="button" aria-label="Darstellung umschalten (hell/dunkel)" data-tip="Darstellung umschalten"><svg class="i" aria-hidden="true"><use href="#i-theme"/></svg></button>
+        <button class="btn icon ghost" id="pwChange" type="button" aria-label="Passwort ändern" data-tip="Passwort ändern"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg></button>
+        <button class="btn small ghost" id="logout" type="button"><svg class="i" aria-hidden="true"><use href="#i-logout"/></svg>Abmelden</button>
+      </div>
+    </div>
+  </aside>
+  <div class="schleier" id="schleier" hidden></div>
+
+  <main id="main" tabindex="-1"></main>
+
+  <button class="laeuft" id="laeuft" type="button" hidden>
+    <span class="laeuft-punkt" aria-hidden="true"></span>
+    <span class="laeuft-text"><span class="laeuft-label">Läuft gerade</span><span class="laeuft-titel" id="laeuftTitel"></span></span>
+    <span class="laeuft-zeit" id="laeuftZeit"></span>
+  </button>
+
+  <nav class="tabbar" aria-label="Ansichten">
+    <a href="#heute" data-view="heute"><svg class="i" aria-hidden="true"><use href="#i-heute"/></svg><span>Heute</span></a>
+    <a href="#woche" data-view="woche"><svg class="i" aria-hidden="true"><use href="#i-woche"/></svg><span>Woche</span></a>
+    <a href="#backlog" data-view="backlog"><svg class="i" aria-hidden="true"><use href="#i-backlog"/></svg><span>Backlog</span></a>
+    <a href="#rueckblick" data-view="rueckblick"><svg class="i" aria-hidden="true"><use href="#i-rueckblick"/></svg><span>Rückblick</span></a>
+  </nav>
+</div>
+
+<dialog id="dlg"></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="vendor/supabase.js?v=1"></script>
+<script src="js/config.js?v=1"></script>
+<script src="js/logic.js?v=1"></script>
+<script src="js/db.js?v=1"></script>
+<script src="js/ui.js?v=1"></script>
+<!-- Ansichten: js/views/*.js hier einbinden (vor app.js) -->
+<script src="js/app.js?v=1"></script>
 </body>
 </html>
