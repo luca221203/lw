@@ -37,17 +37,39 @@ window.LW = window.LW || {};
   app.fokus = app.fokus || (taskId => go('fokus', taskId));
 
   /* ---------- Daten ---------- */
+  /* Stammdaten: Quests, Aufgaben, Profile, Kunden (beim Start und beim Abgleich). */
+  async function stammdaten() {
+    const [profile, quests, tasks, kunden] = await Promise.all([
+      DB.profile(), DB.quests(), DB.tasks(),
+      DB.kunden().catch(e => { console.warn('Kunden nicht lesbar', e); return null; })
+    ]);
+    return { profile, quests, tasks, kunden };
+  }
   async function laden() {
     const heute = L.isoTag(new Date());
     const ich = await DB.ich(); // zuerst: legt beim ersten Login das Profil an
-    const [profile, quests, tasks, kunden, laufend, zeitenHeute] = await Promise.all([
-      DB.profile(), DB.quests(), DB.tasks(),
-      DB.kunden().catch(e => { console.warn('Kunden nicht lesbar', e); return []; }),
-      DB.laufend(), DB.zeiten(heute, heute)
-    ]);
-    Object.assign(S, { ich, profile, quests, tasks, kunden, laufend, zeitenHeute });
+    zeitNr++; stammNr++; // laufende Abgleiche sind damit veraltet
+    const [stamm, laufend, zeitenHeute] = await Promise.all([stammdaten(), DB.laufend(), DB.zeiten(heute, heute)]);
+    if (!stamm.kunden) stamm.kunden = [];
+    Object.assign(S, { ich, ...stamm, laufend, zeitenHeute });
+    stammAm = Date.now();
     rahmen();
   }
+
+  /* Reihenfolge-Schutz für den Abgleich: Jedes Schreiben zählt seinen Zähler beim Beginn und
+     beim Ende hoch. Ein Abgleich, dessen Abfrage sich damit überschnitten hat, ist veraltet und
+     wird verworfen – so kann ein altes Ergebnis keinen gerade gestarteten Timer verstecken und
+     keinen gerade gestoppten zurückholen (bzw. keine gerade gespeicherte Aufgabe zurückdrehen). */
+  let zeitNr = 0, stammNr = 0, stammAm = 0;
+  function zaehlen(namen, plus) {
+    namen.forEach(n => {
+      const f = DB[n];
+      if (typeof f !== 'function') return;
+      DB[n] = async function (...a) { plus(); try { return await f.apply(this, a); } finally { plus(); } };
+    });
+  }
+  zaehlen(['starteTimer', 'stoppeTimer', 'saveZeit', 'deleteZeit'], () => { zeitNr++; });
+  zaehlen(['saveTask', 'deleteTask', 'saveQuest', 'deleteQuest', 'saveProfil'], () => { stammNr++; });
 
   /* Eigene Sekunden pro Quest heute (inkl. laufendem Timer): { questId: sek } */
   function stundenHeute() {
@@ -180,7 +202,7 @@ window.LW = window.LW || {};
     tagStand = L.isoTag(new Date());
     tick = setInterval(() => {
       ticks++;
-      if (ticks % 60 === 0 && L.isoTag(new Date()) !== tagStand) { abgleichen(); return; } // neuer Tag
+      if (ticks % 60 === 0 && L.isoTag(new Date()) !== tagStand) { abgleichen(true); return; } // neuer Tag
       if (!S.laufend) return;
       chip();
       if (ticks % 30 === 0) questListe();
@@ -188,21 +210,33 @@ window.LW = window.LW || {};
   }
   function uhrStoppen() { clearInterval(tick); tick = null; }
 
-  /* Laufenden Timer und heutige Zeiten neu holen: beim Zurückkehren in den Tab
-     (anderes Gerät könnte den Timer gestoppt haben) und beim Tageswechsel. */
-  async function abgleichen() {
+  /* Laufenden Timer und heutige Zeiten neu holen (nach eigenen Timer-Aktionen). Mit alles = true
+     zusätzlich Quests, Aufgaben, Profile und Kunden: beim Zurückkehren in den Tab / die App und beim
+     Tageswechsel – das andere Gerät oder Kai könnten inzwischen etwas geändert haben.
+     Veraltete Ergebnisse (Schreiben dazwischen, neuerer Abgleich) werden verworfen. */
+  async function abgleichen(alles) {
     if (!S.ich) return;
+    const wer = S.ich.id, nr = ++zeitNr, snr = alles ? ++stammNr : stammNr; // neuerer Abgleich verdrängt älteren
     try {
       const heute = L.isoTag(new Date());
-      const [laufend, zeitenHeute] = await Promise.all([DB.laufend(), DB.zeiten(heute, heute)]);
-      if (!S.ich) return;
-      tagStand = heute;
-      Object.assign(S, { laufend, zeitenHeute });
+      const [laufend, zeitenHeute, stamm] = await Promise.all([
+        DB.laufend(), DB.zeiten(heute, heute), alles ? stammdaten() : null
+      ]);
+      if (!S.ich || S.ich.id !== wer) return; // abgemeldet oder anderer Nutzer
+      const zeitFrisch = nr === zeitNr, stammFrisch = !!stamm && snr === stammNr;
+      if (!zeitFrisch && !stammFrisch) return;
+      if (stammFrisch) {
+        if (!stamm.kunden) delete stamm.kunden; // Kunden nicht lesbar: bisherige behalten
+        Object.assign(S, stamm);
+        stammAm = Date.now();
+      }
+      if (zeitFrisch) { tagStand = heute; Object.assign(S, { laufend, zeitenHeute }); }
       rahmen();
       neuZeichnen();
     } catch (e) { console.warn('Abgleich fehlgeschlagen', e); }
   }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) abgleichen(); });
+  // Zurück in Tab oder App: alles abgleichen (Stammdaten höchstens alle 15 s, sonst nur Zeiten)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) abgleichen(Date.now() - stammAm > 15000); });
 
   /* ---------- Handy-Menü (Seitenleiste von links) ---------- */
   const side = $('#side'), schleier = $('#schleier'), menuKnopf = $('#menuAuf');
@@ -396,7 +430,7 @@ window.LW = window.LW || {};
     linkPruefen();
   }
 
-  Object.assign(app, { S, laden, go, rahmen, stundenHeute, zeigen, neuZeichnen, abgleichen });
+  Object.assign(app, { S, laden, go, rahmen, stundenHeute, zeigen, neuZeichnen, abgleichen, menuZu });
 
   /* ---------- Start: nach allen Skripten, damit Ansichten registriert sind ---------- */
   function start() {

@@ -60,6 +60,14 @@ window.LW = window.LW || {};
     const sb = window.supabase.createClient(C.supabaseUrl, C.supabaseKey, { auth: { flowType: 'implicit' } });
     let meCache = null;
 
+    /* Liste vollständig laden: Supabase liefert je Abfrage höchstens 1000 Zeilen, daher seitenweise.
+       abfrage() baut jedes Mal eine neue Abfrage mit eindeutiger Sortierung (zuletzt nach id). */
+    function alle(abfrage) {
+      return window.LW.logic.alleSeiten(async (von, bis) => {
+        const { data, error } = await abfrage().range(von, bis); fehler(error); return data;
+      }, 1000);
+    }
+
     async function ich() {
       const { data } = await sb.auth.getSession();
       const user = data.session && data.session.user;
@@ -119,7 +127,7 @@ window.LW = window.LW || {};
       },
 
       async quests() {
-        const { data, error } = await sb.from('lw_quests').select('*').order('sortierung').order('created_at'); fehler(error); return data;
+        return alle(() => sb.from('lw_quests').select('*').order('sortierung').order('created_at').order('id'));
       },
       async saveQuest(q) {
         if (!q.id) {
@@ -142,7 +150,7 @@ window.LW = window.LW || {};
       },
       async deleteQuest(id) { const { error } = await sb.from('lw_quests').delete().eq('id', id); fehler(error, true); },
 
-      async tasks() { const { data, error } = await sb.from('lw_tasks').select('*').order('sortierung').order('created_at'); fehler(error); return data; },
+      tasks() { return alle(() => sb.from('lw_tasks').select('*').order('sortierung').order('created_at').order('id')); },
       async saveTask(t) {
         const q = t.id ? sb.from('lw_tasks').update(pick(t, TASK_FELDER)).eq('id', t.id) : sb.from('lw_tasks').insert(pick(t, TASK_FELDER));
         const { data, error } = await q.select().single(); fehler(error); return data;
@@ -150,7 +158,7 @@ window.LW = window.LW || {};
       async deleteTask(id) { const { error } = await sb.from('lw_tasks').delete().eq('id', id); fehler(error, true); },
 
       async kunden() {
-        const { data, error } = await sb.from('kunden').select('id, firma, vorname, nachname').eq('status', 'aktiv'); fehler(error);
+        const data = await alle(() => sb.from('kunden').select('id, firma, vorname, nachname').eq('status', 'aktiv').order('id'));
         return data.map(k => ({ id: k.id, name: kundeName(k) })).sort((a, b) => a.name.localeCompare(b.name, 'de'));
       },
 
@@ -158,12 +166,12 @@ window.LW = window.LW || {};
         const me = await ich();
         const r = tagesBereich(von, bis);
         const [a, b] = await Promise.all([
-          sb.from('lw_zeiten').select('*').gte('start', r.von).lt('start', r.bis),
+          alle(() => sb.from('lw_zeiten').select('*').gte('start', r.von).lt('start', r.bis).order('start').order('id')),
           sb.from('lw_zeiten').select('*').eq('user_id', me.id).is('ende', null)
         ]);
-        fehler(a.error); fehler(b.error);
+        fehler(b.error);
         const map = new Map();
-        a.data.concat(b.data).forEach(z => map.set(z.id, z));
+        a.concat(b.data).forEach(z => map.set(z.id, z));
         return [...map.values()].sort((x, y) => x.start.localeCompare(y.start));
       },
       laufend,
@@ -391,7 +399,7 @@ window.LW = window.LW || {};
         const r = tagesBereich(von, bis);
         const liste = zeiten.filter(z => {
           const q = questById(z.quest_id);
-          if (!(z.user_id === me.id || (q && q.geteilt))) return false;
+          if (!(z.user_id === me.id || sichtbar(q))) return false; // wie RLS: eigene oder Quest sichtbar (Besitzer oder geteilt)
           return (z.start >= r.von && z.start < r.bis) || (z.user_id === me.id && !z.ende);
         }).sort((a, b) => a.start.localeCompare(b.start));
         return wait(liste);

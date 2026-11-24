@@ -131,4 +131,14 @@
     await D().saveQuest({ id: med.id, geteilt: true });
     eq((await D().quests()).find(function (x) { return x.id === med.id; }).geteilt, true);
   });
+  t('db: Besitzer sieht Kais Zeiten auf eigener Quest auch nach dem Teilen', async function () {
+    var med = (await D().quests()).find(function (x) { return x.name === 'Mediawo'; });
+    var kaiVorher = (await D().zeiten(iso(-6), iso(0))).filter(function (z) { return z.user_id === 'u-kai'; }).length;
+    ok(kaiVorher > 0, 'Kai hat Zeiten auf Mediawo');
+    await D().saveQuest({ id: med.id, geteilt: false });
+    try {
+      var kaiNachher = (await D().zeiten(iso(-6), iso(0))).filter(function (z) { return z.user_id === 'u-kai'; }).length;
+      eq(kaiNachher, kaiVorher, 'Kais Zeiten bleiben für den Besitzer sichtbar');
+    } finally { await D().saveQuest({ id: med.id, geteilt: true }); }
+  });
 })();

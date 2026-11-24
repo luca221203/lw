@@ -39,6 +39,7 @@ window.LW = window.LW || {};
     const d = dlg();
     if (!d.open && !vorherFokus) vorherFokus = document.activeElement; // gesetzt = vorheriger Dialog schließt gerade erst
     d.className = breit ? 'breit' : '';
+    d.removeAttribute('aria-labelledby'); // ein Dialog, der ihn braucht (Befehlsleiste), setzt ihn danach selbst
     d.innerHTML = html;
     if (!d.open) d.showModal();
     const erstes = d.querySelector('[autofocus], input:not([type=hidden]), select, textarea, button.primary, button');
@@ -53,6 +54,7 @@ window.LW = window.LW || {};
     const d = dlg();
     if (d.open) return; // schon wieder geöffnet (Folgedialog direkt nach dem Schließen): neuen Inhalt behalten
     d.innerHTML = '';
+    d.removeAttribute('aria-labelledby');
     d.oncancel = null;
     delete d.dataset.pflicht;
     const f = vorherFokus; vorherFokus = null;

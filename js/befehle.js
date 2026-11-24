@@ -75,7 +75,10 @@ window.LW = window.LW || {};
       if (!e) return;
       const fn = bearbeiten ? e.bearbeiten : e.lauf;
       if (!fn) return;
-      d.addEventListener('close', () => { try { fn(); } catch (err) { console.error(err); } }, { once: true });
+      d.addEventListener('close', () => {
+        if (app.menuZu) app.menuZu(); // Handy: offenes Menü schließen, auch wenn die Aktion nicht navigiert
+        try { fn(); } catch (err) { console.error(err); }
+      }, { once: true });
       closeDlg();
     }
 

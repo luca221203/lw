@@ -217,8 +217,21 @@ window.LW = window.LW || {};
     return treffer.map(function (x) { return x.e; });
   }
 
+  /* Alle Zeilen laden, auch über die Grenze je Abfrage hinaus (Supabase: höchstens 1000).
+     hole(von, bis) liefert die Zeilen von..bis (inklusive, wie .range()). Die Abfrage braucht
+     eine eindeutige Sortierung, sonst können Zeilen zwischen den Seiten verrutschen. */
+  async function alleSeiten(hole, groesse) {
+    groesse = groesse || 1000;
+    var alle = [];
+    for (var von = 0; ; von += groesse) {
+      var seite = await hole(von, von + groesse - 1);
+      alle = alle.concat(seite || []);
+      if (!seite || seite.length < groesse) return alle;
+    }
+  }
+
   window.LW.logic = { isoTag: isoTag, wochenTage: wochenTage, kalenderwoche: kalenderwoche, dauerSek: dauerSek, formatDauer: formatDauer, formatTimer: formatTimer,
     heuteAnsicht: heuteAnsicht, istUeberfaellig: istUeberfaellig, backlog: backlog,
     summeProQuest: summeProQuest, rueckblick: rueckblick, laufendZuLange: laufendZuLange,
-    normalisieren: normalisieren, befehlsSuche: befehlsSuche };
+    normalisieren: normalisieren, befehlsSuche: befehlsSuche, alleSeiten: alleSeiten };
 })();

@@ -98,9 +98,23 @@ window.LW = window.LW || {};
     const sichtbar = t => !t.archiviert && (!t.erledigt_am || t.id === gewaehlt || L.isoTag(new Date(t.erledigt_am)) === heute);
     const gruppen = quests.map(q => ({ q, tasks: S.tasks.filter(t => t.quest_id === q.id && (sichtbar(t) || t.id === gewaehlt)) }));
     const erste = (gruppen.find(g => g.tasks.length) || { tasks: [] }).tasks[0];
-    const wert = gewaehlt || (erste ? erste.id : 'q:' + quests[0].id);
+    /* Bisherige Zuordnung, die hier nicht als Option vorkommt (z. B. Aufgabe auf dem anderen Gerät
+       angelegt und hier noch nicht geladen): unverändert als eigene Option anbieten und vorwählen,
+       sonst würde der Browser still die erste Option wählen und der Eintrag würde umgebucht. */
+    const angeboten = v => gruppen.some(g => 'q:' + g.q.id === v || g.tasks.some(t => t.id === v));
+    const fremdQuest = zeit ? zeit.quest_id : vorgaben.quest_id;
+    let fremd = null;
+    if (gewaehlt && !angeboten(gewaehlt) && fremdQuest) {
+      const quest = S.quests.find(q => q.id === fremdQuest) || null;
+      const taskId = gewaehlt.startsWith('q:') ? null : gewaehlt;
+      const task = taskId ? S.tasks.find(t => t.id === taskId) || null : null;
+      const text = taskId ? (task ? task.titel : 'Aufgabe auf anderem Gerät angelegt') : (quest ? quest.name : 'Bisherige Quest') + ' – ohne Aufgabe';
+      fremd = { wert: gewaehlt, quest, questId: fremdQuest, taskId, task, text: text + (quest && taskId ? ' (' + quest.name + ')' : '') };
+    }
+    const wert = gewaehlt && (fremd || angeboten(gewaehlt)) ? gewaehlt : (erste ? erste.id : 'q:' + quests[0].id);
     const opt = (v, text) => `<option value="${esc(v)}"${v === wert ? ' selected' : ''}>${esc(text)}</option>`;
-    const optionen = gruppen.map(g => `<optgroup label="${esc(g.q.name)}">${g.tasks.map(t => opt(t.id, t.titel)).join('')}${opt('q:' + g.q.id, g.q.name + ' – ohne Aufgabe')}</optgroup>`).join('');
+    const optionen = (fremd ? `<optgroup label="Bisherige Zuordnung">${opt(fremd.wert, fremd.text)}</optgroup>` : '') +
+      gruppen.map(g => `<optgroup label="${esc(g.q.name)}">${g.tasks.map(t => opt(t.id, t.titel)).join('')}${opt('q:' + g.q.id, g.q.name + ' – ohne Aufgabe')}</optgroup>`).join('');
 
     const titel = korrektur ? 'Endzeit korrigieren' : neu ? 'Zeit nachtragen' : 'Zeit bearbeiten';
     const sub = korrektur ? 'Der Timer läuft seit über 12 Stunden. Trag ein, wann du aufgehört hast.'
@@ -152,6 +166,7 @@ window.LW = window.LW || {};
     /* Auswahl -> Quest, Aufgabe, Abrechenbar-Vorgabe */
     const auswahl = () => {
       const v = f.aufgabe.value;
+      if (fremd && v === fremd.wert) return { quest: fremd.quest, task: fremd.task, fremd: true };
       if (v.startsWith('q:')) return { quest: quests.find(q => q.id === v.slice(2)), task: null };
       const task = S.tasks.find(t => t.id === v);
       return { quest: quests.find(q => q.id === task.quest_id), task };
@@ -161,10 +176,10 @@ window.LW = window.LW || {};
     const abrZeigen = () => {
       const { quest, task } = auswahl();
       const box = f.querySelector('[data-abr]');
-      box.hidden = !quest.firma;
-      const kid = task ? task.kunde_id : null;
+      box.hidden = !(quest && quest.firma); // unbekannte Quest: Wert des Eintrags bleibt unverändert
+      const kid = fremd && f.aufgabe.value === fremd.wert ? (zeit ? zeit.kunde_id : task && task.kunde_id) || null : task ? task.kunde_id : null;
       f.querySelector('[data-abr-text]').textContent = kid ? 'Kunde: ' + (kundeName(kid) || 'nicht mehr aktiv') : 'Ohne Kunde – standardmäßig nicht abrechenbar';
-      if (!abrGeaendert) f.abrechenbar.checked = !!(quest.firma && kid);
+      if (!abrGeaendert) f.abrechenbar.checked = !!(quest && quest.firma && kid);
     };
     if (zeit) f.abrechenbar.checked = !!zeit.abrechenbar;
     if (alt && typeof alt.abr === 'boolean') { f.abrechenbar.checked = alt.abr; abrGeaendert = true; }
@@ -206,18 +221,29 @@ window.LW = window.LW || {};
       e.preventDefault();
       const b = pruefen(true);
       if (b.fehler) { b.feld.focus(); return; }
-      const { quest, task } = auswahl();
+      const sel = auswahl();
       // Unveränderte Zeiten behalten ihre Sekunden
       const startIso = zeit && uhrzeit(start) === f.von.value && startTag === f.tag.value ? zeit.start : b.s.toISOString();
       const endeIso = zeit && zeit.ende && !korrektur && uhrzeit(ende) === f.bis.value && endeTag === L.isoTag(b.e) ? zeit.ende : b.e.toISOString();
-      const gleicheAufgabe = zeit && (zeit.task_id || null) === (task ? task.id : null) && zeit.quest_id === quest.id;
-      const daten = {
-        quest_id: quest.id, task_id: task ? task.id : null,
-        kunde_id: quest.firma ? (gleicheAufgabe ? zeit.kunde_id || null : (task && task.kunde_id) || null) : null,
-        start: startIso, ende: endeIso,
-        abrechenbar: !!quest.firma && f.abrechenbar.checked,
-        notiz: f.notiz.value.trim() || null
-      };
+      const basis = { start: startIso, ende: endeIso, notiz: f.notiz.value.trim() || null };
+      let daten;
+      if (sel.fremd) { // bisherige Zuordnung unverändert lassen
+        daten = {
+          quest_id: fremd.questId, task_id: fremd.taskId,
+          kunde_id: zeit ? zeit.kunde_id || null : (fremd.task && fremd.task.kunde_id) || null,
+          abrechenbar: fremd.quest ? !!fremd.quest.firma && f.abrechenbar.checked : !!(zeit && zeit.abrechenbar),
+          ...basis
+        };
+      } else {
+        const { quest, task } = sel;
+        const gleicheAufgabe = zeit && (zeit.task_id || null) === (task ? task.id : null) && zeit.quest_id === quest.id;
+        daten = {
+          quest_id: quest.id, task_id: task ? task.id : null,
+          kunde_id: quest.firma ? (gleicheAufgabe ? zeit.kunde_id || null : (task && task.kunde_id) || null) : null,
+          abrechenbar: !!quest.firma && f.abrechenbar.checked,
+          ...basis
+        };
+      }
       LW.dialoge.senden(f, async () => {
         await DB.saveZeit(neu ? daten : { id: zeit.id, ...daten });
         entwurf(schluessel, null);

@@ -145,4 +145,24 @@
     eq(L().befehlsSuche('he', [{ text: 'Sache' }, { text: 'Heute' }])[0].text, 'Heute');
     eq(L().befehlsSuche('uebe', [{ text: 'Neue Aufgabe', extra: 'Aktion' }, { text: 'Fokus', extra: 'laufende Aufgabe' }]), []);
   });
+  /* ---- Alle Zeilen seitenweise laden (Supabase liefert höchstens 1000 je Abfrage) ---- */
+  function seitenQuelle(n) {
+    var rows = []; for (var i = 0; i < n; i++) rows.push(i);
+    var aufrufe = [];
+    var hole = function (von, bis) { aufrufe.push([von, bis]); return Promise.resolve(rows.slice(von, bis + 1)); };
+    return { hole: hole, aufrufe: aufrufe };
+  }
+  t('alleSeiten: lädt über die Seitengrenze hinaus vollständig', async function () {
+    var q = seitenQuelle(2500);
+    var r = await L().alleSeiten(q.hole, 1000);
+    eq(r.length, 2500);
+    eq(r[0], 0); eq(r[2499], 2499);
+    eq(q.aufrufe, [[0, 999], [1000, 1999], [2000, 2999]]);
+  });
+  t('alleSeiten: genau volle Seite fragt einmal nach, leer liefert leer', async function () {
+    var q = seitenQuelle(1000);
+    eq((await L().alleSeiten(q.hole, 1000)).length, 1000);
+    eq(q.aufrufe.length, 2);
+    eq(await L().alleSeiten(seitenQuelle(0).hole, 1000), []);
+  });
 })();

@@ -14,6 +14,7 @@ window.LW = window.LW || {};
   const Z = () => window.LW.zeiten;
 
   let main = null, taskId = null, questId = null, uhr = null, beschaeftigt = false;
+  let runde = 0; // zählt jedes Rendern: eine Aktion navigiert nur, solange ihre Ansicht noch steht
   const S = () => app.S;
   const heute = () => L.isoTag(new Date());
   const taskVon = id => (id && S().tasks.find(t => t.id === id)) || null;
@@ -84,7 +85,7 @@ window.LW = window.LW || {};
     const aktionen = hier
       ? `<button class="btn" type="button" data-aktion="pause">${icon('i-pause')}Pause</button>
          <button class="btn" type="button" data-aktion="stopp">${icon('i-stop')}Stopp</button>${erledigtBtn}`
-      : (task ? `<button class="btn primary" type="button" data-aktion="weiter">${icon('i-play')}${liste.length ? 'Weiter' : 'Fokus starten'}</button>` : '') + erledigtBtn;
+      : (task && !fertig ? `<button class="btn primary" type="button" data-aktion="weiter">${icon('i-play')}${liste.length ? 'Weiter' : 'Fokus starten'}</button>` : '') + erledigtBtn;
     const status = hier ? `<span class="punkt" aria-hidden="true"></span>Läuft seit ${esc(seit(hier))}`
       : fertig ? 'Erledigt' : liste.length ? 'Pausiert' : 'Noch nicht gestartet';
 
@@ -138,6 +139,8 @@ window.LW = window.LW || {};
     if (beschaeftigt || !main) return;
     beschaeftigt = true;
     if (el) el.setAttribute('aria-busy', 'true');
+    const meine = runde;
+    const nochDa = () => !!main && runde === meine; // Nutzer hat die Ansicht nicht verlassen
     try {
       const task = taskVon(taskId);
       if (name === 'pause') {
@@ -145,9 +148,9 @@ window.LW = window.LW || {};
         neuMitFokus('weiter', 'nachtragen');
       } else if (name === 'stopp') {
         if (laeuftHier() && !(await Z().timerStoppen())) return;
-        app.go('heute');
+        if (nochDa()) app.go('heute');
       } else if (name === 'weiter') {
-        if (!task) return;
+        if (!task || task.erledigt_am) return; // erledigte Aufgabe: kein neuer Timer
         const s = S();
         const vorher = s.laufend && !laeuftHier() ? (taskVon(s.laufend.task_id) || {}).titel || 'Ohne Aufgabe' : null;
         const z = await guard(() => DB.starteTimer(task));
@@ -161,8 +164,8 @@ window.LW = window.LW || {};
         if (!task || task.erledigt_am) return;
         const titel = task.titel;
         if (!(await app.erledigtUmschalten(task))) return; // stoppt einen laufenden Timer zuerst
-        const sek = summe(eintraege(), new Date());
-        app.go('heute');
+        const sek = nochDa() ? summe(eintraege(), new Date()) : 0;
+        if (nochDa()) app.go('heute');
         toast('„' + titel + '“ erledigt' + (sek >= 60 ? ' · ' + L.formatDauer(sek) + ' heute' : ''));
       }
     } finally {
@@ -193,7 +196,8 @@ window.LW = window.LW || {};
   };
   app.fokus = id => {
     if (!id && main && S().view === 'fokus') {
-      if (!laeuftHier() && taskVon(taskId)) aktion('weiter', $('[data-aktion="weiter"]', main));
+      const t = taskVon(taskId);
+      if (!laeuftHier() && t && !t.erledigt_am) aktion('weiter', $('[data-aktion="weiter"]', main));
       return;
     }
     if (fokusVorher) fokusVorher(id); else app.go('fokus', id);
@@ -203,6 +207,7 @@ window.LW = window.LW || {};
     titel: 'Fokus',
     render(m, param) {
       main = m;
+      runde++;
       taskId = param || null;
       questId = null;
       const z = S().laufend;

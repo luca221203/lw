@@ -356,7 +356,9 @@ create policy "lw_tasks_loeschen" on public.lw_tasks
   for delete to authenticated
   using (public.lw_sichtbar(quest_id));
 
--- Zeiteinträge: eigene lesen, auf geteilten Quests auch die der anderen.
+-- Zeiteinträge: eigene lesen, auf sichtbaren Quests (eigene oder geteilte)
+-- auch die der anderen. So sieht der Besitzer einer Quest die Zeiten von
+-- Kai auch nach dem Ende des Teilens (Firma-Auswertung, Abrechnung).
 -- Anlegen nur eigene auf sichtbaren Quests. Ändern/Löschen: eigene immer
 -- (auch nach dem Ende des Teilens, z. B. laufenden Timer stoppen).
 -- user_id kann wegen "with check" nicht geändert werden; das Verschieben
@@ -365,10 +367,7 @@ create policy "lw_tasks_loeschen" on public.lw_tasks
 drop policy if exists "lw_zeiten_lesen" on public.lw_zeiten;
 create policy "lw_zeiten_lesen" on public.lw_zeiten
   for select to authenticated
-  using (
-    user_id = auth.uid()
-    or exists (select 1 from public.lw_quests q where q.id = lw_zeiten.quest_id and q.geteilt)
-  );
+  using (user_id = auth.uid() or public.lw_sichtbar(quest_id));
 
 drop policy if exists "lw_zeiten_anlegen" on public.lw_zeiten;
 create policy "lw_zeiten_anlegen" on public.lw_zeiten
