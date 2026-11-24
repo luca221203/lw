@@ -45,13 +45,13 @@ window.LW = window.LW || {};
       (kunde && opt.kunde !== false ? `<span class="tag">${esc(kunde)}</span>` : '');
     let knoepfe = '';
     if (!fertig && opt.tagKnopf === 'text') {
-      knoepfe += `<button class="btn small ghost zeile-knopf" type="button" data-aktion="tag" aria-haspopup="menu" aria-expanded="false" aria-label="Tag setzen: ${titel}, jetzt ${esc(t.tag ? tagLang(t.tag) : 'ohne Tag')}">${icon('i-woche')}<span>${esc(t.tag ? relativ(t.tag) : 'Ohne Tag')}</span></button>`;
+      knoepfe += `<button class="btn small ghost zeile-knopf" type="button" data-aktion="tag" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t.tag ? relativ(t.tag) : 'Ohne Tag')} – Tag setzen: ${titel}">${icon('i-woche')}<span>${esc(t.tag ? relativ(t.tag) : 'Ohne Tag')}</span></button>`;
     } else if (!fertig && opt.tagKnopf === 'icon') {
       knoepfe += `<button class="btn icon small ghost zeile-knopf tip-links" type="button" data-aktion="tag" aria-haspopup="menu" aria-expanded="false" aria-label="Tag setzen: ${titel}" data-tip="Tag setzen">${icon('i-woche')}</button>`;
     }
     if (!fertig && opt.personKnopf && !q.geteilt) knoepfe += '<span class="zeile-platz" aria-hidden="true"></span>'; // Spalten bleiben bündig
     if (!fertig && opt.personKnopf && q.geteilt) {
-      knoepfe += `<button class="btn small ghost zeile-knopf" type="button" data-aktion="zuweisen" aria-haspopup="menu" aria-expanded="false" aria-label="Zuweisen: ${titel}, jetzt ${esc(personName(t.zugewiesen_an))}">${icon('i-person')}<span>${esc(personName(t.zugewiesen_an))}</span></button>`;
+      knoepfe += `<button class="btn small ghost zeile-knopf" type="button" data-aktion="zuweisen" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(personName(t.zugewiesen_an))} – Zuweisen: ${titel}">${icon('i-person')}<span>${esc(personName(t.zugewiesen_an))}</span></button>`;
     }
     if (!fertig && opt.fokus !== false) {
       knoepfe += laeuft
@@ -95,8 +95,12 @@ window.LW = window.LW || {};
 
   /* ---------- Menü am Knopf (Popover, Pfeiltasten, Esc, Fokus zurück) ---------- */
   let offen = null;
+  const popoverDa = typeof HTMLElement.prototype.showPopover === 'function';
+  function menueZu() { if (offen) offen.hidePopover(); }
+  /* Ergebnis: {wert} bei Auswahl, undefined bei Abbruch, null wenn der Browser kein Popover kann. */
   function menue(knopf, titel, eintraege) {
-    if (offen) offen.hidePopover();
+    if (!popoverDa) return Promise.resolve(null);
+    menueZu();
     return new Promise(fertig => {
       const m = document.createElement('div');
       m.className = 'menue';
@@ -115,6 +119,7 @@ window.LW = window.LW || {};
         m.hidePopover();
       });
       m.addEventListener('keydown', e => {
+        if (e.key !== 'Tab') e.stopPropagation(); // keine globalen Kürzel (N, F, ⌘K) bei offenem Menü
         const liste = punkte(), i = liste.indexOf(document.activeElement);
         let ziel = null;
         if (e.key === 'ArrowDown') ziel = liste[(i + 1) % liste.length];
@@ -126,11 +131,13 @@ window.LW = window.LW || {};
       });
       m.addEventListener('toggle', e => {
         if (e.newState !== 'closed') return;
-        offen = null;
         knopf.setAttribute('aria-expanded', 'false');
         m.remove();
-        if (knopf.isConnected) knopf.focus({ preventScroll: true });
-        else { const main = document.getElementById('main'); if (main) main.focus({ preventScroll: true }); }
+        if (offen === m) { // nur zurückfokussieren, wenn nicht schon ein neues Menü offen ist
+          offen = null;
+          if (knopf.isConnected) knopf.focus({ preventScroll: true });
+          else { const main = document.getElementById('main'); if (main) main.focus({ preventScroll: true }); }
+        }
         fertig(wert);
       });
       m.showPopover();
@@ -159,6 +166,7 @@ window.LW = window.LW || {};
       { wert: null, text: 'Kein Tag', aktiv: !jetzt }
     ];
     const r = await menue(knopf, 'Tag für „' + task.titel + '“', eintraege);
+    if (r === null) { LW.dialoge.aufgabe(task); return false; } // ohne Popover: Tag im Aufgaben-Dialog setzen
     if (r) return tagSetzen(task, r.wert);
     return false;
   }
@@ -170,6 +178,7 @@ window.LW = window.LW || {};
     const eintraege = personen.map(p => ({ wert: p.id, text: p.id === S.ich.id ? 'Ich' : p.name, aktiv: jetzt === p.id }))
       .concat([{ trenner: true }, { wert: null, text: 'Niemand', aktiv: !jetzt }]);
     const r = await menue(knopf, 'Zuweisen: „' + task.titel + '“', eintraege);
+    if (r === null) { LW.dialoge.aufgabe(task); return false; }
     if (r) return zuweisen(task, r.wert);
     return false;
   }
@@ -194,5 +203,5 @@ window.LW = window.LW || {};
     else if (drin) main.focus({ preventScroll: true });
   }
 
-  window.LW.aufgaben = { zeile, tagSetzen, zuweisen, tagMenue, personMenue, tagText, tagLang, plusTage, personName, neuZeichnenMitFokus };
+  window.LW.aufgaben = { zeile, tagSetzen, zuweisen, tagMenue, personMenue, tagText, tagLang, plusTage, personName, neuZeichnenMitFokus, menueZu };
 })();

@@ -160,6 +160,6 @@ window.LW = window.LW || {};
       main.onclick = klick;
     },
     aktualisieren() { if (main) A.neuZeichnenMitFokus(main, zeichnen); },
-    destroy() { if (main) { const d = $('details.archiv', main); if (d) archivOffen = d.open; } main = null; }
+    destroy() { A.menueZu(); if (main) { const d = $('details.archiv', main); if (d) archivOffen = d.open; } main = null; }
   };
 })();

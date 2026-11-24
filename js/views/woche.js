@@ -55,6 +55,7 @@ window.LW = window.LW || {};
   }
 
   function zeichnen() {
+    gezogen = null; // altes DOM (gezogene Karte, Markierung) ist gleich weg
     const S = app.S, heute = heuteIso(), tage = L.wochenTage(montag), a = auswahl();
     const diese = L.wochenTage(heute)[0] === montag;
     const p = partner();
@@ -208,6 +209,7 @@ window.LW = window.LW || {};
       stundenLaden();
     },
     destroy() {
+      A.menueZu();
       clearInterval(uhr); uhr = null;
       if (main) {
         main.removeEventListener('dragstart', dragStart);
