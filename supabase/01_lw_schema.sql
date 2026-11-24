@@ -152,6 +152,23 @@ create trigger lw_tasks_quest_fest before update of quest_id on public.lw_tasks
 for each row execute function public.lw_tasks_quest_fest();
 
 -- ---------------------------------------------------------------------
+-- Schutz: Ersteller einer Aufgabe ist fest (beim Anlegen prüft die
+-- Regel "lw_tasks_anlegen", dass created_by = auth.uid() ist)
+-- ---------------------------------------------------------------------
+create or replace function public.lw_tasks_ersteller_fest()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.created_by is distinct from old.created_by then
+    raise exception 'Der Ersteller einer Aufgabe kann nicht geändert werden.';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists lw_tasks_ersteller_fest on public.lw_tasks;
+create trigger lw_tasks_ersteller_fest before update on public.lw_tasks
+for each row execute function public.lw_tasks_ersteller_fest();
+
+-- ---------------------------------------------------------------------
 -- Abrechnungssperre (vorbereitet für Schritt 2)
 -- Ein Eintrag, dessen bisherige rechnung_id auf eine nicht stornierte
 -- Rechnung zeigt, ist festgeschrieben (GoBD): nicht änderbar, nicht
@@ -184,11 +201,29 @@ for each row execute function public.lw_zeiten_sperre();
 
 -- ---------------------------------------------------------------------
 -- Zuordnung: Ist eine Aufgabe angegeben, muss sie zur Quest des
--- Eintrags gehören. (Name beginnt mit "z", damit die Sperre vorher läuft.)
+-- Eintrags gehören. Beim Ändern darf ein Eintrag nur in eine Quest
+-- verschoben werden, die der Nutzer sieht (die Regel "lw_zeiten_aendern"
+-- prüft nur user_id, damit eigene Einträge auch nach dem Ende des
+-- Teilens stoppbar und korrigierbar bleiben).
+-- Geprüft wird nur, was sich ändert: So bleibt ein Eintrag auf einer
+-- nicht mehr geteilten Quest änderbar, auch wenn der Client quest_id
+-- und task_id unverändert mitschickt.
+-- security definer, damit die Prüfung nicht an den Leserechten auf
+-- lw_tasks scheitert. (Name beginnt mit "z", damit die Sperre vorher läuft.)
 -- ---------------------------------------------------------------------
 create or replace function public.lw_zeiten_zuordnung()
-returns trigger language plpgsql set search_path = public as $$
+returns trigger language plpgsql security definer set search_path = public as $$
 begin
+  if tg_op = 'UPDATE'
+     and new.quest_id is not distinct from old.quest_id
+     and new.task_id  is not distinct from old.task_id then
+    return new;
+  end if;
+  if tg_op = 'UPDATE'
+     and new.quest_id is distinct from old.quest_id
+     and not public.lw_sichtbar(new.quest_id) then
+    raise exception 'Diese Quest ist nicht sichtbar.';
+  end if;
   if new.task_id is not null
      and not exists (select 1 from public.lw_tasks
                       where id = new.task_id and quest_id = new.quest_id) then
@@ -280,7 +315,7 @@ create policy "lw_tasks_lesen" on public.lw_tasks
 drop policy if exists "lw_tasks_anlegen" on public.lw_tasks;
 create policy "lw_tasks_anlegen" on public.lw_tasks
   for insert to authenticated
-  with check (public.lw_sichtbar(quest_id));
+  with check (public.lw_sichtbar(quest_id) and created_by = auth.uid());
 
 drop policy if exists "lw_tasks_aendern" on public.lw_tasks;
 create policy "lw_tasks_aendern" on public.lw_tasks
@@ -293,8 +328,12 @@ create policy "lw_tasks_loeschen" on public.lw_tasks
   for delete to authenticated
   using (public.lw_sichtbar(quest_id));
 
--- Zeiteinträge: eigene lesen, auf geteilten Quests auch die der anderen;
--- schreiben nur eigene auf sichtbaren Quests
+-- Zeiteinträge: eigene lesen, auf geteilten Quests auch die der anderen.
+-- Anlegen nur eigene auf sichtbaren Quests. Ändern/Löschen: eigene immer
+-- (auch nach dem Ende des Teilens, z. B. laufenden Timer stoppen).
+-- user_id kann wegen "with check" nicht geändert werden; das Verschieben
+-- in eine nicht sichtbare Quest verhindert der Trigger lw_zeiten_zuordnung,
+-- abgerechnete Einträge schützt lw_zeiten_sperre.
 drop policy if exists "lw_zeiten_lesen" on public.lw_zeiten;
 create policy "lw_zeiten_lesen" on public.lw_zeiten
   for select to authenticated
@@ -311,10 +350,10 @@ create policy "lw_zeiten_anlegen" on public.lw_zeiten
 drop policy if exists "lw_zeiten_aendern" on public.lw_zeiten;
 create policy "lw_zeiten_aendern" on public.lw_zeiten
   for update to authenticated
-  using (user_id = auth.uid() and public.lw_sichtbar(quest_id))
-  with check (user_id = auth.uid() and public.lw_sichtbar(quest_id));
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 
 drop policy if exists "lw_zeiten_loeschen" on public.lw_zeiten;
 create policy "lw_zeiten_loeschen" on public.lw_zeiten
   for delete to authenticated
-  using (user_id = auth.uid() and public.lw_sichtbar(quest_id));
+  using (user_id = auth.uid());

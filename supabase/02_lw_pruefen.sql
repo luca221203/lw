@@ -8,8 +8,9 @@
 --   - anon:     4 Zeilen mit "kein Zugriff"
 --   - Regel:    lw_profile 3, lw_quests 4, lw_tasks 4, lw_zeiten 4
 --   - Index:    lw_zeiten_ein_laufender (unique, where ende is null)
---   - Trigger:  lw_quests_besitzer_fest, lw_tasks_quest_fest,
---               lw_zeiten_sperre, lw_zeiten_zuordnung – alle "aktiv"
+--   - Trigger:  lw_quests_besitzer_fest, lw_tasks_ersteller_fest,
+--               lw_tasks_quest_fest, lw_zeiten_sperre,
+--               lw_zeiten_zuordnung – alle "aktiv"
 --   - Funktion: lw_sichtbar mit "security definer"
 -- Steht irgendwo "AUS", "FEHLT", "ZUGRIFF!" oder "inaktiv", stimmt etwas nicht.
 -- =====================================================================
