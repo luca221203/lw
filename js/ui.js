@@ -5,6 +5,9 @@ window.LW = window.LW || {};
   const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  /* Quest-Farbe nur als #rrggbb in style-Attribute übernehmen, sonst neutrales Grau. */
+  const farbe = h => /^#[0-9a-f]{6}$/i.test(h || '') ? h : '#7A7F87';
+
   /* Kurzer Hinweis unten. err = true für Fehler (bleibt länger stehen). */
   function toast(msg, err) {
     const t = $('#toast');
@@ -90,5 +93,5 @@ window.LW = window.LW || {};
     d.addEventListener('click', e => { if (e.target === d && d._aussen && !d.dataset.pflicht) closeDlg(); });
   });
 
-  window.LW.ui = { $, $$, esc, toast, fehlerText, openDlg, closeDlg, confirmDlg, guard };
+  window.LW.ui = { $, $$, esc, farbe, toast, fehlerText, openDlg, closeDlg, confirmDlg, guard };
 })();

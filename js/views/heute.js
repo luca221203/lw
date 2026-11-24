@@ -3,7 +3,7 @@
    Stellt bereit: LW.app.fokusStarten(task), LW.app.erledigtUmschalten(task) – auch für spätere Ansichten. */
 window.LW = window.LW || {};
 (function () {
-  const { $, $$, esc, toast, guard } = window.LW.ui;
+  const { $, $$, esc, farbe, toast, guard } = window.LW.ui;
   const DB = window.LW.db, L = window.LW.logic;
   const app = window.LW.app = window.LW.app || {};
   const views = window.LW.views = window.LW.views || {};
@@ -49,10 +49,18 @@ window.LW = window.LW || {};
   app.erledigtUmschalten = erledigtUmschalten;
 
   /* Tastatur-Haken der Hülle: wirken auf die ausgewählte Aufgabe, solange Heute offen ist. */
-  const auswahl = () => (app.S && app.S.view === 'heute' && main && gewaehlt) ? taskById(gewaehlt) : null;
+  const zeileVon = id => main && id ? $(`.aufgabe[data-id="${CSS.escape(id)}"]`, main) : null;
+  const auswahl = () => (app.S && app.S.view === 'heute' && zeileVon(gewaehlt)) ? taskById(gewaehlt) || null : null;
   app.fokus = taskId => {
-    const t = taskId ? null : auswahl();
-    if (t && !t.erledigt_am) fokusStarten(t); else app.go('fokus', taskId);
+    if (taskId || !app.S || app.S.view !== 'heute' || !main) { app.go('fokus', taskId); return; }
+    let t = auswahl();
+    if (t && t.erledigt_am) t = null;
+    if (t) { fokusStarten(t); return; }
+    if (app.S.laufend) { app.go('fokus', app.S.laufend.task_id); return; } // läuft schon etwas: dorthin
+    const erste = $('.aufgabe:not(.fertig)', main);
+    t = erste && taskById(erste.dataset.id);
+    if (t) { waehlen(t.id, false); fokusStarten(t); return; }
+    toast('Für heute ist keine offene Aufgabe geplant. Mit N legst du eine an.');
   };
   app.erledigt = () => { const t = auswahl(); if (t) erledigtUmschalten(t); };
 
@@ -79,7 +87,7 @@ window.LW = window.LW || {};
 
   function block(b, heute) {
     const q = b.quest, name = esc(q.name), id = esc(q.id);
-    return `<section class="qb" style="--q:${esc(q.farbe)}" aria-labelledby="qb-${id}" data-quest="${id}">
+    return `<section class="qb" style="--q:${farbe(q.farbe)}" aria-labelledby="qb-${id}" data-quest="${id}">
       <header class="qb-kopf">
         <span class="dot" aria-hidden="true"></span>
         <h2 class="qb-name" id="qb-${id}">${name}</h2>
@@ -111,6 +119,7 @@ window.LW = window.LW || {};
         : `<div class="leer"><strong>Noch keine Quests</strong><span>Quests sind deine langfristigen Ziele, z. B. Mediawo, Sport oder Master.</span>
            <button class="btn primary" type="button" data-aktion="neue-quest">Quest anlegen</button></div>`}
     </div>`;
+    if (gewaehlt && !zeileVon(gewaehlt)) gewaehlt = null; // Auswahl nicht mehr sichtbar
     stundenZeigen();
   }
 
@@ -137,7 +146,8 @@ window.LW = window.LW || {};
   function pfeile(e) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     if (!main || $('#dlg').open || e.metaKey || e.ctrlKey || e.altKey || tippt(e.target)) return;
-    if (!(e.target === document.body || main.contains(e.target))) return; // nicht in Seitenleiste/Menü
+    // nur wenn eine Aufgabe bzw. die Liste den Fokus hat (nicht body, Seitenleiste, Kopf)
+    if (!e.target.closest || !e.target.closest('.quest-bloecke') || !main.contains(e.target)) return;
     const ids = $$('.aufgabe', main).map(li => li.dataset.id);
     if (!ids.length) return;
     e.preventDefault();

@@ -4,7 +4,7 @@
    Nach dem Speichern wird der Zustand (LW.app.S) angepasst, dann Seitenleiste und Ansicht neu gezeichnet. */
 window.LW = window.LW || {};
 (function () {
-  const { $, esc, toast, openDlg, closeDlg, confirmDlg, fehlerText } = window.LW.ui;
+  const { $, esc, farbe: farbeOk, toast, openDlg, closeDlg, confirmDlg, fehlerText } = window.LW.ui;
   const DB = window.LW.db, L = window.LW.logic;
   const app = window.LW.app = window.LW.app || {};
   const S = () => app.S;
@@ -64,6 +64,14 @@ window.LW = window.LW || {};
     finally { delete f.dataset.sendet; btn.removeAttribute('aria-busy'); }
   }
 
+  /* Aufgaben einer Quest nachziehen (Firma aus, Teilen beendet). Einzelne Fehler stoppen das Speichern nicht. */
+  async function anpassen(liste, patch) {
+    for (const t of liste) {
+      try { const r = await DB.saveTask({ id: t.id, ...patch }); ersetzen(S().tasks, { ...(r || {}), id: t.id, ...patch }); }
+      catch (e) { console.warn('Aufgabe nicht angepasst', t.id, e); }
+    }
+  }
+
   /* ---------- Quest ---------- */
   function quest(q, opt) {
     opt = opt || {};
@@ -71,7 +79,7 @@ window.LW = window.LW || {};
     const belegt = s.quests.map(x => (x.farbe || '').toLowerCase());
     const frei = FARBEN.find(f => !belegt.includes(f[0].toLowerCase()));
     q = q || { name: '', farbe: (frei || FARBEN[0])[0], geteilt: false, firma: false, archiviert: false };
-    const farbe = (q.farbe || FARBEN[0][0]);
+    const farbe = farbeOk(q.farbe || FARBEN[0][0]);
     const farben = FARBEN.some(f => f[0].toLowerCase() === farbe.toLowerCase()) ? FARBEN : FARBEN.concat([[farbe, 'Bisherige Farbe']]);
     const partner = partnerName();
     const eigen = neu || q.owner_id === s.ich.id;
@@ -114,9 +122,16 @@ window.LW = window.LW || {};
       if (!nameOk()) return;
       const daten = { name: f.qname.value.trim(), farbe: f.farbe.value, geteilt: f.geteilt.checked, firma: f.firma.checked };
       const endetTeilen = !neu && q.geteilt && !daten.geteilt;
+      const firmaAus = !neu && q.firma && !daten.firma;
+      const eigeneTasks = () => s.tasks.filter(t => t.quest_id === q.id);
+      // Teilen endet: Zuweisungen an die andere Person lösen. Nicht-Besitzer vorher (danach kein Zugriff mehr).
+      const zuweisungenLoesen = () => anpassen(eigeneTasks().filter(t => t.zugewiesen_an && t.zugewiesen_an !== q.owner_id), { zugewiesen_an: null });
       senden(f, async () => {
         if (neu) daten.sortierung = s.quests.reduce((m, x) => Math.max(m, x.sortierung || 0), 0) + 1;
+        if (endetTeilen && q.owner_id !== s.ich.id) await zuweisungenLoesen();
         const r = await DB.saveQuest(neu ? daten : { id: q.id, ...daten });
+        if (endetTeilen && q.owner_id === s.ich.id) await zuweisungenLoesen();
+        if (firmaAus) await anpassen(eigeneTasks().filter(t => t.kunde_id), { kunde_id: null }); // kein Kunde ohne Firma
         if (endetTeilen) await app.laden(); // Sichtbarkeit hat sich geändert
         else ersetzen(s.quests, r);
         closeDlg();
@@ -216,10 +231,17 @@ window.LW = window.LW || {};
       g.hidden = !q.geteilt; k.hidden = !q.firma;
       f.querySelector('[data-zusatz]').hidden = g.hidden && k.hidden;
     };
-    const schluessel = t ? t.id : 'neu';
+    const schluessel = s.ich.id + ':' + (t ? t.id : 'neu');
     const alt = entwurf(schluessel);
     if (alt) {
-      FELDER.forEach(n => { if (alt[n] != null && (n !== 'quest' || gibt(alt[n]))) f[n].value = alt[n]; });
+      FELDER.forEach(n => {
+        if (alt[n] == null) return;
+        const el = f[n];
+        if (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === alt[n])) return; // Option gibt es nicht mehr
+        el.value = alt[n];
+      });
+      if (neu && vorgaben.quest_id && gibt(vorgaben.quest_id)) f.quest.value = vorgaben.quest_id; // ausdrückliche Vorgaben gewinnen
+      if (neu && vorgaben.tag) f.tag.value = vorgaben.tag;
       f.querySelector('[data-entwurf]').hidden = false;
       f.querySelector('[data-verwerfen]').onclick = () => { entwurf(schluessel, null); aufgabe(t, vorgaben); };
     }

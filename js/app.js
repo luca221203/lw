@@ -4,7 +4,7 @@
    Navigation: LW.app.go('backlog', questId) -> #backlog/<questId>. */
 window.LW = window.LW || {};
 (function () {
-  const { $, $$, esc, toast, guard, openDlg, closeDlg, fehlerText } = window.LW.ui;
+  const { $, $$, esc, farbe, toast, guard, openDlg, closeDlg, fehlerText } = window.LW.ui;
   const DB = window.LW.db, L = window.LW.logic;
   const app = window.LW.app = window.LW.app || {};
   const views = window.LW.views = window.LW.views || {};
@@ -151,7 +151,7 @@ window.LW = window.LW || {};
     const sek = stundenHeute();
     const qs = S.quests.filter(q => !q.archiviert).sort((a, b) => (a.sortierung || 0) - (b.sortierung || 0));
     $('#questListe').innerHTML = qs.length ? qs.map(q => `<li><a href="${hashVon('backlog', q.id)}">
-        <span class="dot" style="--q:${esc(q.farbe)}" aria-hidden="true"></span>
+        <span class="dot" style="--q:${farbe(q.farbe)}" aria-hidden="true"></span>
         <span class="name">${esc(q.name)}</span>
         ${sek[q.id] ? `<span class="std">${L.formatDauer(sek[q.id])}</span>` : ''}</a></li>`).join('')
       : '<li class="leer-zeile">Noch keine Quests.</li>';
@@ -167,7 +167,7 @@ window.LW = window.LW || {};
     const jetzt = new Date();
     const zeit = L.formatTimer(L.dauerSek(z, jetzt));
     el.hidden = false;
-    el.style.setProperty('--q', quest && quest.farbe ? quest.farbe : '');
+    el.style.setProperty('--q', quest ? farbe(quest.farbe) : '');
     el.classList.toggle('zu-lange', L.laufendZuLange(z, jetzt));
     $('#laeuftTitel').textContent = titel;
     $('#laeuftZeit').textContent = zeit;
