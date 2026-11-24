@@ -11,8 +11,13 @@
 --   - Trigger:  lw_quests_besitzer_fest, lw_tasks_ersteller_fest,
 --               lw_tasks_quest_fest, lw_zeiten_sperre,
 --               lw_zeiten_zuordnung – alle "aktiv"
---   - Funktion: lw_sichtbar mit "security definer"
--- Steht irgendwo "AUS", "FEHLT", "ZUGRIFF!" oder "inaktiv", stimmt etwas nicht.
+--   - Rechte authenticated: lw_profile "INSERT, SELECT, UPDATE",
+--               die anderen drei "DELETE, INSERT, SELECT, UPDATE"
+--   - Funktion: lw_sichtbar (security definer, stable) und
+--               lw_quest_teilen_beenden (security definer), beide
+--               "anon: nein, authenticated: ja"
+-- Steht irgendwo "AUS", "FEHLT", "ZUGRIFF!", "AUSFÜHRBAR!", "NEIN"
+-- oder "inaktiv", stimmt etwas nicht.
 -- =====================================================================
 
 with tabellen(name) as (
@@ -70,13 +75,33 @@ ergebnis(reihe, pruefung, objekt, ergebnis) as (
      and c.relname in (select name from tabellen)
 
   union all
-  -- Hilfsfunktion für die Regeln
-  select 6, 'Funktion', pr.proname::text,
+  -- Tabellenrechte für angemeldete Nutzer
+  select 6, 'Rechte authenticated', t.name::text,
+         case when c.oid is null then 'FEHLT'
+              else coalesce(
+                (select string_agg(r, ', ' order by r)
+                   from unnest(array['SELECT','INSERT','UPDATE','DELETE',
+                                     'TRUNCATE','REFERENCES','TRIGGER']) as r
+                  where has_table_privilege('authenticated', c.oid, r)),
+                'keine') end
+    from tabellen t
+    left join pg_class c
+      on c.relname = t.name and c.relnamespace = 'public'::regnamespace
+
+  union all
+  -- Funktionen: Hilfsfunktion für die Regeln und "Teilen beenden"
+  select 7, 'Funktion', pr.proname::text,
          case when pr.prosecdef then 'security definer' else 'security invoker' end
-         || case when pr.provolatile = 's' then ', stable' else ', NICHT stable' end
+         || case pr.provolatile when 's' then ', stable'
+                                when 'v' then ', volatile'
+                                else ', immutable' end
+         || case when has_function_privilege('anon', pr.oid, 'EXECUTE')
+                 then ', anon: AUSFÜHRBAR!' else ', anon: nein' end
+         || case when has_function_privilege('authenticated', pr.oid, 'EXECUTE')
+                 then ', authenticated: ja' else ', authenticated: NEIN' end
     from pg_proc pr
    where pr.pronamespace = 'public'::regnamespace
-     and pr.proname = 'lw_sichtbar'
+     and pr.proname in ('lw_sichtbar', 'lw_quest_teilen_beenden')
 )
 select pruefung, objekt, ergebnis
   from ergebnis

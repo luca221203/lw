@@ -97,8 +97,6 @@ create index if not exists lw_zeiten_rechnung_idx  on public.lw_zeiten (rechnung
 -- Hilfsfunktion: Ist die Quest für den angemeldeten Nutzer sichtbar?
 -- (eigene Quest oder geteilt). security definer, damit die Regeln auf
 -- lw_tasks/lw_zeiten nicht von den Regeln auf lw_quests abhängen.
--- Liest immer den gespeicherten Stand der Quest (Stand vor der
--- laufenden Änderung), siehe Regel "lw_quests_aendern".
 -- ---------------------------------------------------------------------
 create or replace function public.lw_sichtbar(q uuid)
 returns boolean
@@ -131,6 +129,31 @@ $$;
 drop trigger if exists lw_quests_besitzer_fest on public.lw_quests;
 create trigger lw_quests_besitzer_fest before update on public.lw_quests
 for each row execute function public.lw_quests_besitzer_fest();
+
+-- ---------------------------------------------------------------------
+-- Teilen beenden (Aufruf aus der App: rpc('lw_quest_teilen_beenden'))
+-- Bei geteilten Quests dürfen beide das Teilen beenden. Über ein normales
+-- update geht das für den Nicht-Besitzer nicht: Postgres prüft die neue
+-- Zeile auch gegen die Leseregel, und eine fremde, nicht geteilte Quest
+-- ist für ihn nicht mehr sichtbar. Darum diese Funktion (security
+-- definer): Sie prüft selbst, dass die Quest für den Aufrufer sichtbar
+-- ist, und setzt nur geteilt = false.
+-- ---------------------------------------------------------------------
+create or replace function public.lw_quest_teilen_beenden(q uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null or not public.lw_sichtbar(q) then
+    raise exception 'Diese Quest ist nicht sichtbar.';
+  end if;
+  update public.lw_quests set geteilt = false where id = q;
+end;
+$$;
+revoke all on function public.lw_quest_teilen_beenden(uuid) from public, anon;
+grant execute on function public.lw_quest_teilen_beenden(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- Schutz: Aufgabe mit gebuchter Zeit nicht in eine andere Quest verschieben
@@ -174,7 +197,9 @@ for each row execute function public.lw_tasks_ersteller_fest();
 -- Rechnung zeigt, ist festgeschrieben (GoBD): nicht änderbar, nicht
 -- löschbar – auch das Entfernen der rechnung_id ist dann verboten.
 -- Wird die Rechnung storniert, ist der Eintrag wieder frei.
--- Das erstmalige Setzen der rechnung_id (Abrechnen) ist erlaubt.
+-- Das erstmalige Setzen der rechnung_id (Abrechnen) ist erlaubt, aber
+-- nur auf eine echte Rechnung (typ = 'rechnung'), nie auf ein Storno –
+-- sonst wäre der Eintrag für immer gesperrt.
 -- Fehlt die Rechnung (nicht lesbar), gilt der Eintrag sicherheitshalber
 -- als gesperrt.
 -- ---------------------------------------------------------------------
@@ -183,7 +208,7 @@ returns trigger language plpgsql security definer set search_path = public as $$
 declare
   v_status text;
 begin
-  if old.rechnung_id is not null then
+  if tg_op <> 'INSERT' and old.rechnung_id is not null then
     select status into v_status from public.rechnungen where id = old.rechnung_id;
     if v_status is distinct from 'storniert' then
       raise exception 'Diese Zeit ist abgerechnet und gesperrt.';
@@ -192,11 +217,17 @@ begin
   if tg_op = 'DELETE' then
     return old;
   end if;
+  if new.rechnung_id is not null
+     and (tg_op = 'INSERT' or new.rechnung_id is distinct from old.rechnung_id)
+     and not exists (select 1 from public.rechnungen
+                      where id = new.rechnung_id and typ = 'rechnung') then
+    raise exception 'Zeiten können nur einer Rechnung zugeordnet werden, nicht einem Storno.';
+  end if;
   return new;
 end;
 $$;
 drop trigger if exists lw_zeiten_sperre on public.lw_zeiten;
-create trigger lw_zeiten_sperre before update or delete on public.lw_zeiten
+create trigger lw_zeiten_sperre before insert or update or delete on public.lw_zeiten
 for each row execute function public.lw_zeiten_sperre();
 
 -- ---------------------------------------------------------------------
@@ -288,18 +319,15 @@ create policy "lw_quests_anlegen" on public.lw_quests
   for insert to authenticated
   with check (owner_id = auth.uid());
 
--- Ändern: Auch Nicht-Besitzer dürfen bei geteilten Quests das Teilen
--- beenden. Danach ist geteilt = false und owner_id fremd, darum prüft
--- "with check" zusätzlich lw_sichtbar(id) – das liest den gespeicherten
--- Stand vor der Änderung (die Quest war also geteilt). Den Besitzer
--- kann niemand ändern (Trigger lw_quests_besitzer_fest).
--- Hinweis für den Client: nach "Teilen beenden" durch den
--- Nicht-Besitzer die Zeile nicht zurücklesen (kein .select()).
+-- Ändern: Besitzer immer, alle anderen solange die Quest geteilt ist.
+-- Das Teilen beenden kann per update nur der Besitzer; der Nicht-Besitzer
+-- nutzt dafür die Funktion lw_quest_teilen_beenden. Den Besitzer kann
+-- niemand ändern (Trigger lw_quests_besitzer_fest).
 drop policy if exists "lw_quests_aendern" on public.lw_quests;
 create policy "lw_quests_aendern" on public.lw_quests
   for update to authenticated
   using (owner_id = auth.uid() or geteilt)
-  with check (owner_id = auth.uid() or geteilt or public.lw_sichtbar(id));
+  with check (owner_id = auth.uid() or geteilt);
 
 drop policy if exists "lw_quests_loeschen" on public.lw_quests;
 create policy "lw_quests_loeschen" on public.lw_quests
