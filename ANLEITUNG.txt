@@ -1,0 +1,77 @@
+LW – Version 1
+==============
+
+LW ist dein Planer für Aufgaben, Fokus und Zeiten (Quests, Heute, Woche, Backlog, Rückblick).
+LW nutzt dasselbe Supabase-Projekt wie Mediawo OS. Die Anmeldung ist dieselbe:
+Luca und Kai melden sich mit ihren Mediawo-Zugangsdaten an. Es gibt keine neuen Konten.
+
+Inhalt dieses Ordners
+- index.html, css/, js/, img/, vendor/, manifest.webmanifest   die App
+- supabase/01_lw_schema.sql                                     Datenbank-Tabellen für LW (einmalig ausführen)
+- supabase/02_lw_pruefen.sql                                    Kontrolle danach (nur lesen)
+- tests/, docs/                                                 Selbsttests und Konzept (harmlos, dürfen mit hochgeladen werden)
+
+Ausprobieren ohne echte Daten
+  Die Adresse mit ?demo am Ende öffnen, z. B.
+  https://luca221203.github.io/lw/?demo
+  Beliebige E-Mail und beliebiges Passwort eingeben. Nichts wird gespeichert.
+
+Einrichten (einmalig)
+
+1. Datenbank in Supabase anlegen
+   Supabase > SQL Editor > New query. Den Inhalt von supabase/01_lw_schema.sql einfügen > Run.
+   Danach eine neue Query mit dem Inhalt von supabase/02_lw_pruefen.sql > Run.
+   Das Ergebnis ist eine Tabelle. Prüfen:
+   - RLS: 4 Zeilen (lw_profile, lw_quests, lw_tasks, lw_zeiten), überall "an"
+   - anon: 4 Zeilen mit "kein Zugriff"
+   - Regeln (Policies): lw_profile 3, lw_quests 4, lw_tasks 4, lw_zeiten 4
+   - Trigger: alle "aktiv"
+   - Funktionen lw_sichtbar und lw_quest_teilen_beenden: "anon: nein, authenticated: ja"
+   Steht irgendwo "AUS", "FEHLT", "ZUGRIFF!", "AUSFÜHRBAR!", "NEIN" oder "inaktiv",
+   die Anleitung hier stoppen und Luca Bescheid geben.
+
+2. Registrierung geschlossen halten
+   Supabase > Authentication > Sign In / Providers (bei älteren Oberflächen: Providers > Email).
+   "Allow new users to sign up" muss AUS sein. Sonst könnte sich jeder ein Konto anlegen.
+   (Bei Mediawo OS ist das ohnehin so eingestellt, bitte nur kontrollieren.)
+
+3. Adresse für Links freigeben
+   Supabase > Authentication > URL Configuration > Redirect URLs > "Add URL":
+   https://luca221203.github.io/lw/
+   Speichern. Die "Site URL" nicht ändern, die gehört Mediawo OS.
+   (Das braucht LW für "Passwort vergessen?".)
+
+4. Auf GitHub hochladen
+   github.com > "+" > "New repository", Name: lw, Sichtbarkeit "Public".
+   Der Code enthält keine Geheimnisse. Die Daten liegen in Supabase und sind nur nach
+   dem Login sichtbar. In js/config.js steht nur der öffentliche publishable key.
+   Den secret key nie eintragen.
+   "uploading an existing file" anklicken und den INHALT dieses Ordners hineinziehen
+   (alle Dateien und Unterordner, nicht den Ordner selbst). Der Ordner "supabase" wird nur
+   einmalig in Schritt 1 gebraucht und muss nicht hochgeladen werden.
+   "Commit changes".
+   Settings > Pages > Branch "main" / "/(root)" > Save.
+   Nach 1–2 Minuten erreichbar unter https://luca221203.github.io/lw/
+
+5. Anmelden
+   https://luca221203.github.io/lw/ öffnen und mit den Mediawo-Zugangsdaten anmelden.
+   Beim ersten Mal legt LW das Profil automatisch an (Anzeigename für Zuweisungen).
+   Kai macht dasselbe mit seinem Mediawo-Login.
+
+6. Auf dem Handy als App
+   Adresse im Browser öffnen > "Zum Home-Bildschirm" (iPhone: Teilen-Symbol).
+
+Bedienung in Kürze
+- Strg/Cmd + K    Befehlsleiste: Aufgabe suchen, Ansicht wechseln, Neues anlegen
+                  (Enter = Fokus starten, Alt + Enter = bearbeiten)
+- N               Neue Aufgabe
+- F               Fokus starten oder öffnen
+- Strg/Cmd + Enter  Laufende Aufgabe als erledigt abhaken
+
+Updates
+  Geänderte Dateien erneut auf GitHub hochladen (gleicher Name ersetzt die alte Datei).
+  Danach die Seite neu laden. Falls noch das Alte erscheint: Strg/Cmd + Umschalt + R.
+
+Wichtig
+- Gemeinsame Quests sind für Luca und Kai sichtbar, private nur für den Besitzer.
+- Abgerechnete Zeiten sind gesperrt und lassen sich nicht mehr ändern.

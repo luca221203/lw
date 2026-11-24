@@ -560,3 +560,26 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
   .zeit-meta{flex-wrap:wrap}
   .rb-eintrag{flex-wrap:wrap}
 }
+
+/* ---------- Befehlsleiste (Strg/Cmd+K) ---------- */
+dialog.befehle{align-self:flex-start;margin-top:min(14vh,120px);width:min(560px,calc(100vw - 32px))}
+.bf{padding:0}
+.bf-feld{display:flex;align-items:center;gap:var(--s3);padding:0 var(--s4);border-bottom:1px solid var(--line);color:var(--muted)}
+.bf-feld input{border:0;background:none;box-shadow:none;height:52px;padding:0;font-size:var(--fs-base);color:var(--ink)}
+.bf-feld input:focus{box-shadow:none}
+.bf-feld:focus-within{color:var(--accent-text)}
+.bf-liste{list-style:none;margin:0;padding:var(--s2);max-height:min(360px,calc(100dvh - 240px));overflow:auto}
+.bf-liste li{display:flex;align-items:center;gap:var(--s3);min-height:var(--h-zeile);padding:var(--s1) var(--s3);border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-sm)}
+.bf-liste li .i{width:18px;height:18px;color:var(--muted)}
+.bf-liste li[aria-selected="true"]{background:var(--accent-wash);color:var(--ink)}
+.bf-liste li[aria-selected="true"] .i{color:var(--accent-text)}
+.bf-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bf-art{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:var(--fs-xs)}
+.bf-leer{padding:var(--s5) var(--s4);color:var(--muted);font-size:var(--fs-sm);text-align:center}
+.bf-tasten{display:flex;gap:var(--s4);flex-wrap:wrap;padding:var(--s2) var(--s4);border-top:1px solid var(--line);color:var(--muted);font-size:var(--fs-xs)}
+.bf-tasten kbd{display:inline-block;min-width:18px;margin-right:2px;padding:0 4px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--raised);font:inherit;text-align:center}
+@media (hover:none){.bf-tasten{display:none}}
+@media (max-width:767px){dialog.befehle{margin-top:var(--s3)}}
+.bf-liste li .dot{margin:0 5px}
+/* Tooltips gibt es nur mit Maus oder Tastatur; auf Touch-Geräten würden sie den Seitenrand überragen */
+@media (hover:none){[data-tip]::after{display:none}}

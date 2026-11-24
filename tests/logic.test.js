@@ -118,4 +118,31 @@
     eq(L().laufendZuLange(lauf, new Date(2026, 10, 24, 11, 59)), false);
     eq(L().laufendZuLange({ start: s.toISOString(), ende: new Date(2026, 10, 25).toISOString() }, new Date(2026, 10, 26)), false);
   });
+  /* ---- Befehlsleiste ---- */
+  var cmdDaten = [
+    { text: 'Heute' }, { text: 'Fokus' }, { text: 'Rückblick' },
+    { text: 'Susanne Kreutz Website', extra: 'Mediawo' },
+    { text: 'Überweisung prüfen', extra: 'Privat' },
+    { text: 'Steuer Quartal', extra: 'Mediawo' }
+  ];
+  var cmdTexte = function (q) { return L().befehlsSuche(q, cmdDaten).map(function (e) { return e.text; }); };
+  t('befehlsSuche: Teilwort „fok“ findet Fokus', function () {
+    eq(cmdTexte('fok')[0], 'Fokus');
+  });
+  t('befehlsSuche: Quest-Name und Titel zusammen', function () {
+    eq(cmdTexte('mediawo susanne'), ['Susanne Kreutz Website']);
+  });
+  t('befehlsSuche: Umlaute egal (uber, ueber, Über)', function () {
+    eq(cmdTexte('uber'), ['Überweisung prüfen']);
+    eq(cmdTexte('ueber'), ['Überweisung prüfen']);
+    eq(cmdTexte('ÜBER'), ['Überweisung prüfen']);
+    eq(cmdTexte('ruckblick'), ['Rückblick']);
+    eq(cmdTexte('rueckblick'), ['Rückblick']);
+  });
+  t('befehlsSuche: Wortanfang vor Teiltreffer, leere Eingabe alle, kein Treffer leer', function () {
+    eq(cmdTexte('').length, 6);
+    eq(cmdTexte('xyzq'), []);
+    eq(L().befehlsSuche('he', [{ text: 'Sache' }, { text: 'Heute' }])[0].text, 'Heute');
+    eq(L().befehlsSuche('uebe', [{ text: 'Neue Aufgabe', extra: 'Aktion' }, { text: 'Fokus', extra: 'laufende Aufgabe' }]), []);
+  });
 })();

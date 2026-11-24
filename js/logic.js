@@ -164,7 +164,61 @@ window.LW = window.LW || {};
     return zeit.ende == null && dauerSek(zeit, jetzt) > 12 * 3600;
   }
 
+  /* ---- Befehlsleiste: Suche ohne Rücksicht auf Groß-/Kleinschreibung und Umlaute ---- */
+  /* ü -> u (ohne Akzent) oder, mit umschrift = true, ü -> ue; ß -> ss. */
+  function normalisieren(s, umschrift) {
+    var t = String(s == null ? '' : s).toLowerCase().replace(/ß/g, 'ss');
+    if (umschrift) return t.replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  /* Punktzahl für ein Wort im Text: 3 Wortanfang, 2 irgendwo enthalten, 1 Buchstaben in Reihenfolge (nur im Titel, ab Wortanfang), 0 kein Treffer. */
+  function wortPunkte(text, wort, fuzzy) {
+    var i = text.indexOf(wort);
+    if (i === 0 || (i > 0 && /[^a-z0-9]/.test(text.charAt(i - 1)))) return 3;
+    if (i >= 0) return 2;
+    if (!fuzzy || wort.length < 3) return 0;
+    var pos = text.indexOf(wort.charAt(0));
+    while (pos > 0 && /[a-z0-9]/.test(text.charAt(pos - 1))) pos = text.indexOf(wort.charAt(0), pos + 1); /* erster Buchstabe am Wortanfang */
+    if (pos < 0) return 0;
+    for (var k = 0; k < wort.length; k++) {
+      pos = text.indexOf(wort.charAt(k), pos);
+      if (pos < 0) return 0;
+      pos++;
+    }
+    return 1;
+  }
+
+  /* Filtert und sortiert Einträge { text, extra? } nach der Eingabe. Jedes Wort der Eingabe muss
+     in text oder extra vorkommen (Titel zählt mehr). Leere Eingabe: alle, unverändert. */
+  function befehlsSuche(eingabe, eintraege) {
+    var worte = normalisieren(eingabe).split(/\s+/).filter(Boolean);
+    if (!worte.length) return eintraege.slice();
+    var treffer = [];
+    eintraege.forEach(function (e, idx) {
+      var varianten = [0, 1].map(function (u) {
+        return { titel: normalisieren(e.text, !!u), alles: normalisieren(e.text + ' ' + (e.extra || ''), !!u) };
+      });
+      var summe = 0;
+      for (var w = 0; w < worte.length; w++) {
+        var best = 0;
+        for (var v = 0; v < 2; v++) {
+          var wort = v ? normalisieren(worte[w], true) : worte[w];
+          var p = wortPunkte(varianten[v].titel, wort, true) * 2;
+          if (!p) p = wortPunkte(varianten[v].alles, wort, false);
+          if (p > best) best = p;
+        }
+        if (!best) return;
+        summe += best;
+      }
+      treffer.push({ e: e, punkte: summe, idx: idx });
+    });
+    treffer.sort(function (a, b) { return b.punkte - a.punkte || a.idx - b.idx; });
+    return treffer.map(function (x) { return x.e; });
+  }
+
   window.LW.logic = { isoTag: isoTag, wochenTage: wochenTage, kalenderwoche: kalenderwoche, dauerSek: dauerSek, formatDauer: formatDauer, formatTimer: formatTimer,
     heuteAnsicht: heuteAnsicht, istUeberfaellig: istUeberfaellig, backlog: backlog,
-    summeProQuest: summeProQuest, rueckblick: rueckblick, laufendZuLange: laufendZuLange };
+    summeProQuest: summeProQuest, rueckblick: rueckblick, laufendZuLange: laufendZuLange,
+    normalisieren: normalisieren, befehlsSuche: befehlsSuche };
 })();
