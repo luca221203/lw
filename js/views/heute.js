@@ -32,17 +32,23 @@ window.LW = window.LW || {};
     } finally { startet = false; }
   }
 
+  /* Abhaken stoppt einen laufenden Timer dieser Aufgabe zuerst. Gibt true zurück, wenn umgeschaltet wurde. */
   const schaltet = new Set();
   async function erledigtUmschalten(task) {
-    if (schaltet.has(task.id)) return;
+    if (schaltet.has(task.id)) return false;
     schaltet.add(task.id);
     try {
+      const S = app.S;
+      if (!task.erledigt_am && S.laufend && S.laufend.task_id === task.id) {
+        if (!(await LW.zeiten.timerStoppen())) return false; // Stoppen fehlgeschlagen: nicht abhaken
+      }
       const wert = task.erledigt_am ? null : new Date().toISOString();
       const r = await guard(() => DB.saveTask({ id: task.id, erledigt_am: wert }));
-      if (!r) return;
-      const i = app.S.tasks.findIndex(t => t.id === task.id);
-      if (i >= 0) app.S.tasks[i] = { ...app.S.tasks[i], ...r, erledigt_am: wert };
+      if (!r) return false;
+      const i = S.tasks.findIndex(t => t.id === task.id);
+      if (i >= 0) S.tasks[i] = { ...S.tasks[i], ...r, erledigt_am: wert };
       app.neuZeichnen();
+      return true;
     } finally { schaltet.delete(task.id); }
   }
   app.fokusStarten = fokusStarten;
@@ -110,6 +116,8 @@ window.LW = window.LW || {};
     const bloecke = L.heuteAnsicht(S.quests, S.tasks, S.ich.id, heute);
     const datum = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
     main.innerHTML = `<div class="seite heute">
+      <div class="banner warn" data-zulange hidden><p>Der Timer läuft seit über 12 Stunden. Vergessen zu stoppen?</p>
+        <button class="btn small" type="button" data-aktion="endzeit">Endzeit korrigieren</button></div>
       <header class="kopf"><div><h1>Heute</h1><p class="sub">${esc(datum)}<span data-gesamt></span></p></div>
         ${bloecke.length ? `<button class="btn primary" type="button" data-aktion="neu" aria-keyshortcuts="N">${icon('i-plus')}Aufgabe anlegen<kbd aria-hidden="true">N</kbd></button>` : ''}
       </header>
@@ -132,6 +140,8 @@ window.LW = window.LW || {};
     $$('[data-balken]', main).forEach(el => { el.style.transform = 'scaleX(' + (gesamt ? (sek[el.dataset.balken] || 0) / gesamt : 0) + ')'; });
     const g = $('[data-gesamt]', main);
     if (g) g.textContent = gesamt ? ' · ' + L.formatDauer(gesamt) + ' erfasst' : '';
+    const warn = $('[data-zulange]', main), z = app.S.laufend;
+    if (warn) warn.hidden = !(z && L.laufendZuLange(z, new Date()));
   }
 
   /* ---------- Auswahl ---------- */
@@ -175,6 +185,7 @@ window.LW = window.LW || {};
       case 'neu': LW.dialoge.aufgabe(null, { quest_id: qid, tag: heuteIso() }); break;
       case 'quest': { const q = app.S.quests.find(x => x.id === qid); if (q) LW.dialoge.quest(q); break; }
       case 'neue-quest': LW.dialoge.quest(); break;
+      case 'endzeit': if (app.S.laufend) LW.zeiten.dialog(app.S.laufend, { ende: new Date().toISOString() }); break;
     }
   }
 

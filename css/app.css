@@ -353,3 +353,53 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0s!important;scroll-behavior:auto!important}
 }
+
+/* ---------- Hinweis-Leiste (z. B. Timer läuft > 12 h) ---------- */
+.banner{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2) var(--s4);margin-bottom:var(--s5);padding:var(--s3) var(--s3) var(--s3) var(--s4);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);border-radius:var(--r-lg);background:var(--warn-wash);color:var(--warn);font-size:var(--fs-sm)}
+.banner p{flex:1 1 240px}
+.banner .btn{margin-left:auto}
+
+/* ---------- Fokus ---------- */
+.seite.fokus{max-width:640px;margin:0 auto}
+.fokus-buehne{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--s2);min-height:min(60vh,560px);padding:var(--s5) 0 var(--s7);text-align:center}
+.fokus-quest{display:inline-flex;align-items:center;gap:var(--s2);color:var(--muted);font-size:var(--fs-sm)}
+.fokus-titel{max-width:32ch;font-size:var(--fs-xl);overflow-wrap:anywhere}
+.fokus-label{margin-top:var(--s6);color:var(--muted);font-size:var(--fs-sm)}
+.fokus-timer{font-size:clamp(56px,12vw,96px);font-weight:600;line-height:1.1;letter-spacing:-.02em}
+.fokus-status{display:inline-flex;align-items:center;gap:var(--s2);color:var(--muted);font-size:var(--fs-sm)}
+.fokus-status .punkt{width:8px;height:8px;border-radius:50%;background:var(--q,var(--accent))}
+.fokus-status.aktiv{color:var(--ink)}
+.fokus-aktionen{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--s3);margin-top:var(--s5)}
+.fokus-aktionen .btn{min-width:120px}
+.fokus-hinweis{margin-top:var(--s2);color:var(--muted);font-size:var(--fs-sm)}
+.fokus-leer{margin-top:var(--s7)}
+@media (max-width:767.98px){
+  .fokus-buehne{min-height:0;padding-top:var(--s6)}
+  .fokus-aktionen{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .fokus-aktionen .btn{min-width:0}
+  .fokus-aktionen > .btn:last-child:nth-child(odd){grid-column:1/-1}
+}
+
+/* Heutige Einträge im Fokus */
+.fokus-zeiten{border-top:1px solid var(--line);padding-top:var(--s5)}
+.fz-kopf{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s2)}
+.fz-kopf h2{font-size:var(--fs-base)}
+.fz-summe{color:var(--muted);font-size:var(--fs-sm);font-weight:500}
+.fz-kopf .btn{margin-left:auto;margin-right:calc(-1 * var(--s3))}
+.fz-leer{color:var(--muted);font-size:var(--fs-sm)}
+.zeit-liste{list-style:none;margin:0;padding:0 var(--s2) 0 var(--s4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
+.zeit{display:flex;align-items:center;gap:var(--s3);min-height:var(--h-zeile);padding:var(--s1) 0;border-top:1px solid var(--line)}
+.zeit:first-child{border-top:0}
+.zeit-spanne{font-size:var(--fs-sm);white-space:nowrap}
+.zeit-meta{flex:1;min-width:0;display:flex;align-items:center;gap:var(--s2)}
+.zeit-abr{color:var(--muted);font-size:var(--fs-xs);white-space:nowrap}
+.zeit-notiz{min-width:0;color:var(--muted);font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zeit-dauer{font-size:var(--fs-sm);font-weight:500;white-space:nowrap}
+.zeit-schloss,.zeit-platz{flex:none;display:grid;place-items:center;width:var(--h-sm);height:var(--h-sm);color:var(--muted);border-radius:var(--r)}
+.zeit-schloss .i{width:16px;height:16px}
+.laeuft-zeile .zeit-spanne,.laeuft-zeile .zeit-dauer{color:var(--accent-text)}
+
+/* Zeit-Dialog */
+.feld-reihe.immer{grid-template-columns:1fr 1fr}
+.dauer-anzeige{margin-top:calc(-1 * var(--s2));color:var(--muted);font-size:var(--fs-sm)}
+.dauer-anzeige:empty{display:none}

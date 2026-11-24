@@ -299,7 +299,7 @@ window.LW = window.LW || {};
     return d;
   }
 
-  window.LW.dialoge = { quest, aufgabe };
+  window.LW.dialoge = { quest, aufgabe, senden }; // senden: Doppel-Absenden-Schutz + Formularmeldung, auch für den Zeit-Dialog
   app.neueAufgabe = () => aufgabe(null, { tag: L.isoTag(new Date()) });
 
   /* Seitenleiste: „Quest anlegen“ */
