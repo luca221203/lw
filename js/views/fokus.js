@@ -67,7 +67,7 @@ window.LW = window.LW || {};
     const z = s.laufend;
     const task = taskVon(taskId);
     if (!task && !laeuftHier()) {
-      document.title = 'Fokus · LW';
+      document.title = 'Fokus · TM';
       if (!taskId && !questId) return leer('Gerade läuft kein Timer', 'Wähle in Heute eine Aufgabe und starte den Fokus mit ▶ oder F.');
       return leer('Diese Aufgabe gibt es nicht mehr', 'Sie wurde gelöscht oder ist nicht mehr sichtbar.');
     }
@@ -124,7 +124,7 @@ window.LW = window.LW || {};
     const z = S().laufend;
     $('[data-zulange]', main).hidden = !(z && L.laufendZuLange(z, jetzt));
     const t = taskVon(taskId);
-    document.title = (hier ? L.formatTimer(sek) + ' · ' : '') + (t ? t.titel : 'Fokus') + ' · LW';
+    document.title = (hier ? L.formatTimer(sek) + ' · ' : '') + (t ? t.titel : 'Fokus') + ' · TM';
   }
 
   /* Nach einer Aktion neu zeichnen und den Fokus auf eine sinnvolle Taste legen. */

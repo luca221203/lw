@@ -112,7 +112,7 @@ window.LW = window.LW || {};
       if (a.dataset.view === S.view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     const v = views[S.view];
-    document.title = v.titel + ' · LW';
+    document.title = v.titel + ' · TM';
     $('#topTitel').textContent = v.titel;
     rendern();
     const main = $('#main');
@@ -405,7 +405,7 @@ window.LW = window.LW || {};
       $('#app').hidden = true; $('#login').hidden = false;
       $('#loginDemo').hidden = !DB.demo;
       if (DB.demo && !form.email.value) { form.email.value = 'luca@lw.demo'; form.password.value = 'demo'; }
-      document.title = 'Anmelden · LW';
+      document.title = 'Anmelden · TM';
       return;
     }
     const wer = session.user && session.user.email;
