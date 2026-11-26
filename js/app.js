@@ -10,7 +10,7 @@ window.LW = window.LW || {};
   const views = window.LW.views = window.LW.views || {};
 
   /* Zustand. zeitenHeute: Zeiteinträge von heute (eigene und geteilte) plus der eigene laufende. */
-  const S = app.S = { ich: null, profile: [], quests: [], tasks: [], kunden: [], laufend: null, zeitenHeute: [], view: null, param: null };
+  const S = app.S = { ich: null, profile: [], quests: [], tasks: [], kunden: [], ordner: [], laufend: null, zeitenHeute: [], view: null, param: null };
 
   /* ---------- Platzhalter (spätere Schritte ersetzen sie) ---------- */
   function platzhalter(titel, sub) {
@@ -28,6 +28,8 @@ window.LW = window.LW || {};
   views.backlog = views.backlog || platzhalter('Backlog', 'Alle offenen Aufgaben folgen hier.');
   views.rueckblick = views.rueckblick || platzhalter('Rückblick', 'Die Auswertung folgt.');
   views.fokus = views.fokus || platzhalter('Fokus', 'Der Fokus-Modus folgt.');
+  views.quest = views.quest || platzhalter('Quest', 'Die Quest-Ansicht folgt.');
+  views.ordner = views.ordner || platzhalter('Ordner', 'Die Ordner-Ansicht folgt.');
 
   /* Haken für spätere Schritte – bis dahin ohne Wirkung (Fokus öffnet die Ansicht). */
   const nichts = () => {};
@@ -37,13 +39,15 @@ window.LW = window.LW || {};
   app.fokus = app.fokus || (taskId => go('fokus', taskId));
 
   /* ---------- Daten ---------- */
-  /* Stammdaten: Quests, Aufgaben, Profile, Kunden (beim Start und beim Abgleich). */
+  /* Stammdaten: Quests, Aufgaben, Ordner, Profile, Kunden (beim Start und beim Abgleich).
+     Ordner zuerst laden, bevor gespeichert wird: DB.ordner() setzt DB.ordnerVerfuegbar. */
   async function stammdaten() {
-    const [profile, quests, tasks, kunden] = await Promise.all([
+    const [profile, quests, tasks, kunden, ordner] = await Promise.all([
       DB.profile(), DB.quests(), DB.tasks(),
-      DB.kunden().catch(e => { console.warn('Kunden nicht lesbar', e); return null; })
+      DB.kunden().catch(e => { console.warn('Kunden nicht lesbar', e); return null; }),
+      DB.ordner().catch(e => { console.warn('Ordner nicht lesbar', e); return null; })
     ]);
-    return { profile, quests, tasks, kunden };
+    return { profile, quests, tasks, kunden, ordner };
   }
   async function laden() {
     const heute = L.isoTag(new Date());
@@ -51,6 +55,7 @@ window.LW = window.LW || {};
     zeitNr++; stammNr++; // laufende Abgleiche sind damit veraltet
     const [stamm, laufend, zeitenHeute] = await Promise.all([stammdaten(), DB.laufend(), DB.zeiten(heute, heute)]);
     if (!stamm.kunden) stamm.kunden = [];
+    if (!stamm.ordner) stamm.ordner = [];
     Object.assign(S, { ich, ...stamm, laufend, zeitenHeute });
     stammAm = Date.now();
     rahmen();
@@ -69,17 +74,21 @@ window.LW = window.LW || {};
     });
   }
   zaehlen(['starteTimer', 'stoppeTimer', 'saveZeit', 'deleteZeit'], () => { zeitNr++; });
-  zaehlen(['saveTask', 'deleteTask', 'saveQuest', 'deleteQuest', 'saveProfil'], () => { stammNr++; });
+  zaehlen(['saveTask', 'deleteTask', 'saveQuest', 'deleteQuest', 'saveProfil', 'saveOrdner', 'deleteOrdner'], () => { stammNr++; });
 
+  /* Eigene Zeiteinträge von heute (inkl. laufendem Timer, ohne Doppel). */
+  function eigeneHeute() {
+    if (!S.ich) return [];
+    const map = new Map();
+    S.zeitenHeute.forEach(z => map.set(z.id, z));
+    if (S.laufend) map.set(S.laufend.id, S.laufend);
+    return [...map.values()].filter(z => z.user_id === S.ich.id);
+  }
   /* Eigene Sekunden pro Quest heute (inkl. laufendem Timer): { questId: sek } */
   function stundenHeute() {
     if (!S.ich) return {};
     const heute = L.isoTag(new Date());
-    const map = new Map();
-    S.zeitenHeute.forEach(z => map.set(z.id, z));
-    if (S.laufend) map.set(S.laufend.id, S.laufend);
-    const eigene = [...map.values()].filter(z => z.user_id === S.ich.id);
-    return L.summeProQuest(eigene, heute, heute, new Date());
+    return L.summeProQuest(eigeneHeute(), heute, heute, new Date());
   }
 
   /* ---------- Routing über location.hash: #heute, #backlog/<param> ---------- */
@@ -107,6 +116,7 @@ window.LW = window.LW || {};
       history.replaceState(null, '', location.pathname + location.search + hashVon('heute'));
     }
     S.view = ziel.view; S.param = ziel.param;
+    if (window.LW.aufgaben) window.LW.aufgaben.menueZu(); // offene Menüs gehören zur alten Ansicht
     menuZu(false);
     $$('[data-view]').forEach(a => {
       if (a.dataset.view === S.view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -115,6 +125,7 @@ window.LW = window.LW || {};
     document.title = v.titel + ' · TM';
     $('#topTitel').textContent = v.titel;
     rendern();
+    questListe(); // aktuelle Quest / aktuellen Ordner markieren
     const main = $('#main');
     main.focus({ preventScroll: true });
     window.scrollTo(0, 0);
@@ -169,15 +180,8 @@ window.LW = window.LW || {};
     chip();
   }
 
-  function questListe() {
-    const sek = stundenHeute();
-    const qs = S.quests.filter(q => !q.archiviert).sort((a, b) => (a.sortierung || 0) - (b.sortierung || 0));
-    $('#questListe').innerHTML = qs.length ? qs.map(q => `<li><a href="${hashVon('backlog', q.id)}">
-        <span class="dot" style="--q:${farbe(q.farbe)}" aria-hidden="true"></span>
-        <span class="name">${esc(q.name)}</span>
-        ${sek[q.id] ? `<span class="std">${L.formatDauer(sek[q.id])}</span>` : ''}</a></li>`).join('')
-      : '<li class="leer-zeile">Noch keine Quests.</li>';
-  }
+  /* Quests und Ordner als Baum: js/ordner.js */
+  function questListe() { window.LW.ordner.seitenleiste(); }
 
   function chip() {
     const el = $('#laeuft');
@@ -227,6 +231,7 @@ window.LW = window.LW || {};
       if (!zeitFrisch && !stammFrisch) return;
       if (stammFrisch) {
         if (!stamm.kunden) delete stamm.kunden; // Kunden nicht lesbar: bisherige behalten
+        if (!stamm.ordner) delete stamm.ordner; // Ordner nicht lesbar: bisherige behalten
         Object.assign(S, stamm);
         stammAm = Date.now();
       }
@@ -292,7 +297,7 @@ window.LW = window.LW || {};
     if (tastaturAn) return;
     tastaturAn = true;
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && side.classList.contains('offen')) { e.preventDefault(); menuZu(); return; }
+      if (e.key === 'Escape' && side.classList.contains('offen') && !$('#dlg').open) { e.preventDefault(); menuZu(); return; }
       if ($('#app').hidden || $('#dlg').open || e.repeat || e.isComposing || tippt(e.target)) return;
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
@@ -399,7 +404,7 @@ window.LW = window.LW || {};
     if (!session) {
       aktiverNutzer = null;
       abbauen();
-      Object.assign(S, { ich: null, profile: [], quests: [], tasks: [], kunden: [], laufend: null, zeitenHeute: [], view: null, param: null });
+      Object.assign(S, { ich: null, profile: [], quests: [], tasks: [], kunden: [], ordner: [], laufend: null, zeitenHeute: [], view: null, param: null });
       uhrStoppen(); menuZu(false); closeDlg();
       $('#questListe').innerHTML = ''; $('#laeuft').hidden = true;
       $('#app').hidden = true; $('#login').hidden = false;
@@ -430,7 +435,7 @@ window.LW = window.LW || {};
     linkPruefen();
   }
 
-  Object.assign(app, { S, laden, go, rahmen, stundenHeute, zeigen, neuZeichnen, abgleichen, menuZu });
+  Object.assign(app, { S, laden, go, rahmen, stundenHeute, eigeneHeute, hashVon, zeigen, neuZeichnen, abgleichen, menuZu });
 
   /* ---------- Start: nach allen Skripten, damit Ansichten registriert sind ---------- */
   function start() {

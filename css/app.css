@@ -183,15 +183,44 @@ kbd,.kbd{display:inline-flex;align-items:center;justify-content:center;min-width
 .nav a[aria-current="page"]{background:var(--accent-wash);color:var(--accent-text);font-weight:600}
 
 .side-titel{display:flex;justify-content:space-between;align-items:baseline;padding:0 var(--s3);margin-bottom:var(--s2);font-size:var(--fs-xs);font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.quest-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--s1)}
-.quest-liste a{display:flex;align-items:center;gap:var(--s3);height:var(--h-zeile);padding:0 var(--s3);border-radius:var(--r);color:var(--ink);font-size:var(--fs-sm);text-decoration:none}
+/* Quests und Ordner als Baum: [Aufklappen][Name … Zeit][…]; Einrückung über --t (Tiefe) */
+.quest-liste,.b-kinder{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.b-zeile{--auf:24px;position:relative;display:flex;align-items:center;min-height:var(--h-zeile);padding-left:calc(var(--t,0) * 16px);border-radius:var(--r)}
+.b-auf{flex:none;display:grid;place-items:center;width:var(--auf);height:var(--h-zeile);padding:0;border:0;background:none;color:var(--faint);border-radius:var(--r-sm);cursor:pointer}
+.b-auf .i{width:14px;height:14px;transition:transform var(--dur-2) var(--ease-out)}
+.b-auf[aria-expanded="true"] .i{transform:rotate(90deg)}
+.b-name{flex:1;min-width:0;display:flex;align-items:center;gap:var(--s2);align-self:stretch;padding:0 var(--s1) 0 var(--s1);border:0;background:none;border-radius:var(--r-sm);color:var(--ink);font-size:var(--fs-sm);text-align:left;text-decoration:none;cursor:pointer}
+.b-name:focus-visible,.b-mehr:focus-visible{outline-offset:-2px}
+.b-name[aria-current="page"]{color:var(--accent-text);font-weight:600}
+.b-zeile:has(.b-name[aria-current="page"]){background:var(--accent-wash)}
 .quest-liste .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.quest-liste .std{color:var(--muted);font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
-.quest-liste .leer-zeile{color:var(--muted);font-size:var(--fs-sm);padding:var(--s1) var(--s3)}
+.quest-liste .std{flex:none;color:var(--muted);font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
+.b-mehr{flex:none;display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;background:none;color:var(--muted);border-radius:var(--r-sm);cursor:pointer}
+.b-mehr .i{width:16px;height:16px}
+.b-mehr[aria-expanded="true"]{background:var(--hover);color:var(--ink)}
+.b-archiv > .b-zeile .b-name{color:var(--muted)}
+.b-verdeckt{visibility:hidden}
+.b-umbenennen{position:absolute;margin:0;padding:0 var(--s1);border:1px solid var(--accent);border-radius:var(--r-sm);background:var(--surface);color:var(--ink);font-size:var(--fs-sm);outline:none;box-shadow:0 0 0 2px var(--accent-wash)}
+.b-umbenennen[aria-invalid="true"]{border-color:var(--danger)}
+.b-archiv .b-kinder .b-name{color:var(--muted)}
+.quest-liste .leer-zeile,.b-hinweis{color:var(--muted);font-size:var(--fs-sm);padding:var(--s1) var(--s3)}
+.b-hinweis{margin-top:var(--s2);font-size:var(--fs-xs)}
+.menue-aktionen button{padding-left:var(--s3)}
+.menue .gefahr{color:var(--danger)}
 @media (hover:hover){
   .nav a:hover{background:var(--hover);color:var(--ink)}
   .nav a[aria-current="page"]:hover{background:var(--accent-wash);color:var(--accent-text)}
-  .quest-liste a:hover{background:var(--hover)}
+  .b-zeile:hover{background:var(--hover)}
+  .b-zeile:has(.b-name[aria-current="page"]):hover{background:var(--accent-wash)}
+  .b-auf:hover,.b-mehr:hover{color:var(--ink)}
+  /* Menü-Knopf erst bei Zeige/Fokus deutlich – Zeile bleibt ruhig, bleibt aber auffindbar */
+  .b-mehr{opacity:0}
+  .b-zeile:hover .b-mehr,.b-zeile:focus-within .b-mehr,.b-mehr[aria-expanded="true"]{opacity:1}
+}
+/* Touch: Trefferflächen 44px, Menü-Knopf immer sichtbar */
+@media (max-width:767.98px),(pointer:coarse){
+  .b-zeile{--auf:44px;padding-left:calc(var(--t,0) * 12px)}
+  .b-mehr{width:44px;height:44px}
 }
 
 .side-fuss{margin-top:auto;border-top:1px solid var(--line);padding:var(--s4) var(--s2) 0;display:flex;flex-direction:column;gap:var(--s2)}

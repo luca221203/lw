@@ -122,7 +122,8 @@ window.LW = window.LW || {};
       if (!nameOk()) return;
       const daten = { name: f.qname.value.trim(), farbe: f.farbe.value, geteilt: f.geteilt.checked, firma: f.firma.checked };
       const endetTeilen = !neu && q.geteilt && !daten.geteilt;
-      const firmaAus = !neu && q.firma && !daten.firma;
+      // Firma an/aus baut die Ordner in der Datenbank um (Intern/Extern, Aufgaben wandern): danach alles neu laden
+      const firmaWechsel = neu ? daten.firma : !!q.firma !== daten.firma;
       const eigeneTasks = () => s.tasks.filter(t => t.quest_id === q.id);
       // Teilen endet: Zuweisungen an die andere Person lösen. Nicht-Besitzer vorher (danach kein Zugriff mehr).
       const zuweisungenLoesen = () => anpassen(eigeneTasks().filter(t => t.zugewiesen_an && t.zugewiesen_an !== q.owner_id), { zugewiesen_an: null });
@@ -131,8 +132,7 @@ window.LW = window.LW || {};
         if (endetTeilen && q.owner_id !== s.ich.id) await zuweisungenLoesen();
         const r = await DB.saveQuest(neu ? daten : { id: q.id, ...daten });
         if (endetTeilen && q.owner_id === s.ich.id) await zuweisungenLoesen();
-        if (firmaAus) await anpassen(eigeneTasks().filter(t => t.kunde_id), { kunde_id: null }); // kein Kunde ohne Firma
-        if (endetTeilen) await app.laden(); // Sichtbarkeit hat sich geändert
+        if (endetTeilen || firmaWechsel) await app.laden(); // Sichtbarkeit bzw. Ordner haben sich geändert
         else ersetzen(s.quests, r);
         closeDlg();
         fertig();
@@ -163,6 +163,7 @@ window.LW = window.LW || {};
         await DB.deleteQuest(q.id);
         s.quests = s.quests.filter(x => x.id !== q.id);
         s.tasks = s.tasks.filter(t => t.quest_id !== q.id);
+        s.ordner = (s.ordner || []).filter(o => o.quest_id !== q.id);
         fertig();
         toast('Quest gelöscht');
       } catch (err) {

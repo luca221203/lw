@@ -97,21 +97,24 @@ window.LW = window.LW || {};
   let offen = null;
   const popoverDa = typeof HTMLElement.prototype.showPopover === 'function';
   function menueZu() { if (offen) offen.hidePopover(); }
-  /* Ergebnis: {wert} bei Auswahl, undefined bei Abbruch, null wenn der Browser kein Popover kann. */
-  function menue(knopf, titel, eintraege) {
+  /* Ergebnis: {wert} bei Auswahl, undefined bei Abbruch, null wenn der Browser kein Popover kann.
+     opt.aktionen: Befehls-Menü (role=menuitem, ohne Haken); Einträge dann {wert, text, gefahr?}. */
+  function menue(knopf, titel, eintraege, opt) {
+    const aktionen = !!(opt && opt.aktionen);
     if (!popoverDa) return Promise.resolve(null);
     menueZu();
     return new Promise(fertig => {
       const m = document.createElement('div');
-      m.className = 'menue';
+      m.className = aktionen ? 'menue menue-aktionen' : 'menue';
       m.setAttribute('popover', '');
       m.setAttribute('role', 'menu');
       m.setAttribute('aria-label', titel);
       m.innerHTML = eintraege.map((e, i) => e.trenner ? '<hr role="separator">'
+        : aktionen ? `<button type="button" role="menuitem" tabindex="-1" data-i="${i}"${e.gefahr ? ' class="gefahr"' : ''}><span class="menue-text">${esc(e.text)}</span></button>`
         : `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${!!e.aktiv}" data-i="${i}"><svg class="menue-haken" aria-hidden="true"><use href="#i-check"/></svg><span class="menue-text">${esc(e.text)}</span>${e.hinweis ? `<span class="menue-hinweis">${esc(e.hinweis)}</span>` : ''}</button>`).join('');
       document.body.appendChild(m);
       let wert;
-      const punkte = () => [...m.querySelectorAll('[role=menuitemradio]')];
+      const punkte = () => [...m.querySelectorAll('[data-i]')];
       m.addEventListener('click', e => {
         const b = e.target.closest('[data-i]');
         if (!b) return;
@@ -203,5 +206,5 @@ window.LW = window.LW || {};
     else if (drin) main.focus({ preventScroll: true });
   }
 
-  window.LW.aufgaben = { zeile, tagSetzen, zuweisen, tagMenue, personMenue, tagText, tagLang, plusTage, personName, neuZeichnenMitFokus, menueZu };
+  window.LW.aufgaben = { menue, zeile, tagSetzen, zuweisen, tagMenue, personMenue, tagText, tagLang, plusTage, personName, neuZeichnenMitFokus, menueZu };
 })();
