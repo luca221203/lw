@@ -72,7 +72,7 @@ window.LW = window.LW || {};
     const text = abr ? 'Abrechenbar' + (hier.kunde_id ? ' · ' + kundeText(hier.kunde_id, task) : '') : 'Intern';
     const sperre = Z().gesperrt(hier) ? 'Abgerechnet, nicht mehr änderbar' : !abr && !hier.kunde_id ? 'Ohne Kunde – intern' : null;
     const tip = sperre || (abr ? 'Auf intern umschalten' : 'Auf abrechenbar umschalten');
-    return `<button class="abr-knopf${abr ? ' ist-abr' : ''} tip-unten" type="button" data-aktion="abr" aria-pressed="${abr}"${sperre ? ' aria-disabled="true"' : ''}
+    return `<button class="abr-knopf${abr ? ' ist-abr' : ''} tip-unten" type="button" data-aktion="abr"${sperre ? ' aria-disabled="true"' : ''}
       aria-label="${esc(text)}. ${esc(tip)}" data-tip="${esc(tip)}"><span class="abr-punkt" aria-hidden="true"></span><span class="abr-text">${esc(text)}</span></button>`;
   }
 

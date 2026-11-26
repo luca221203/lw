@@ -33,7 +33,8 @@ window.LW = window.LW || {};
   }
 
   /* ---------- Hilfen ---------- */
-  const verfuegbar = () => DB.ordnerVerfuegbar !== false;
+  const verfuegbar = () => DB.ordnerVerfuegbar !== false;   // Baum zeigen (unbekannt = noch nicht geladen, kein Hinweis)
+  const anlegbar = () => DB.ordnerVerfuegbar === true;      // Anlegen erst, wenn sicher ist, dass es lw_ordner gibt
   const questVon = id => S().quests.find(q => q.id === id);
   const ordnerVon = id => (S().ordner || []).find(o => o.id === id);
   const name = o => L.ordnerName(o, S().kunden);
@@ -60,6 +61,20 @@ window.LW = window.LW || {};
 
   /* ---------- Seitenleiste ---------- */
   let spaeter = false; // Neuzeichnen, sobald das offene Menü zu ist
+  /* Angezeigte Quest / angezeigter Ordner: der Weg dorthin wird beim Hinnavigieren aufgeklappt (nur fürs
+     Zeichnen, nicht in „lw-offen“ gemerkt). k = angezeigte Id, ids = dafür zusätzlich aufgeklappte Ids. */
+  let auto = { k: null, ids: new Set() };
+  // Ids, die offen sein müssen, damit die Zeile von k zu sehen ist (Quest, Ordnerpfad samt Ordner selbst,
+  // bei archivierten die „Archiviert“-Gruppe). null: Ziel (noch) nicht geladen.
+  function wegZu(view, k) {
+    if (view === 'quest') return questVon(k) ? [k] : null;
+    const o = ordnerVon(k);
+    if (!o) return null;
+    const pfad = L.ordnerPfad(o.id, S().ordner || []);
+    const ids = [o.quest_id].concat(pfad.map(x => x.id));
+    if (pfad.some(x => x.archiviert)) ids.push(ARCHIV + o.quest_id);
+    return ids;
+  }
   function seitenleiste() {
     const ul = $('#questListe');
     if (!ul) return;
@@ -77,6 +92,15 @@ window.LW = window.LW || {};
     const sekO = mitOrdner ? L.summeProOrdner(app.eigeneHeute(), s.tasks, s.ordner || [], heute, heute, new Date()) : {};
     const offen = offenSet();
     const aktuell = (s.view === 'quest' || s.view === 'ordner') ? s.param : null;
+    let scrollen = false;
+    if (aktuell !== auto.k) {
+      const weg = aktuell ? wegZu(s.view, aktuell) : [];
+      if (weg) { // sonst beim nächsten Zeichnen erneut versuchen (Daten noch nicht da)
+        auto = { k: aktuell, ids: new Set(weg.filter(id => !offen.has(id))) };
+        scrollen = !!aktuell;
+      }
+    }
+    auto.ids.forEach(id => offen.add(id));
     const qs = s.quests.filter(q => !q.archiviert).sort((x, y) => (x.sortierung || 0) - (y.sortierung || 0));
 
     const zeile = (k, tiefe, opt) => {
@@ -121,6 +145,10 @@ window.LW = window.LW || {};
     ul.innerHTML = (html || '<li class="leer-zeile">Noch keine Quests.</li>') +
       (mitOrdner ? '' : `<li class="b-hinweis">${esc(HINWEIS)}</li>`);
     if (merk) fokusAuf(merk.k, merk.teil);
+    if (scrollen) {
+      const z = ul.querySelector(`[data-k="${CSS.escape(aktuell)}"] > .b-zeile`);
+      if (z && z.offsetParent !== null) z.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
   }
 
   /* Auf-/Zuklappen ohne Neuzeichnen */
@@ -132,7 +160,7 @@ window.LW = window.LW || {};
     kinder.hidden = !auf;
     li.querySelectorAll(':scope > .b-zeile [aria-expanded]:not(.b-mehr)').forEach(b => b.setAttribute('aria-expanded', String(auf)));
     const set = offenSet();
-    if (auf) set.add(k); else set.delete(k);
+    if (auf) set.add(k); else { set.delete(k); auto.ids.delete(k); }
     merken(set);
     return true;
   }
@@ -141,10 +169,9 @@ window.LW = window.LW || {};
   /* ---------- Menü am Eintrag ---------- */
   function eintraege(k) {
     const q = questVon(k);
-    const mit = verfuegbar();
     if (q) {
       const e = [{ wert: 'bearbeiten', text: 'Bearbeiten' }];
-      if (mit && !q.firma) e.push({ wert: 'neu', text: 'Ordner anlegen' });
+      if (anlegbar() && !q.firma) e.push({ wert: 'neu', text: 'Ordner anlegen' });
       return e;
     }
     const o = ordnerVon(k);
@@ -288,7 +315,7 @@ window.LW = window.LW || {};
      (aktive Kunden ohne aktiven Ordner in dieser Quest; ein archivierter Ordner des Kunden wird zurückgeholt). */
   function dialog(opt) {
     const s = S(), q = opt.quest, eltern = opt.eltern || null, alt = opt.ordner || null, kunde = opt.art === 'kunde';
-    if (!verfuegbar()) { toast(HINWEIS); return; }
+    if (!anlegbar()) { if (!verfuegbar()) toast(HINWEIS); return; }
     const was = artText(opt.art, q);
     const ort = pfadText(q, eltern);
     let felder, knopf, titel, kandidaten = [];

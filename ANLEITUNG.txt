@@ -73,6 +73,11 @@ Bedienung in Kürze
 Update: Ordner (03_lw_ordner.sql)
   Quests können jetzt Ordner haben (Firma: Intern/Extern, darunter Kunden und Projekte).
   Reihenfolge einhalten, erst die Datenbank, dann die App:
+  0. Optional, vorher prüfen: Supabase > SQL Editor > New query, diese Zeile einfügen > Run:
+       select count(*) from lw_tasks t join lw_quests q on q.id = t.quest_id where not q.firma and t.kunde_id is not null;
+     Erwartet: 0. Steht dort eine andere Zahl, gibt es Aufgaben mit Kunde in Quests ohne
+     "Firma" – sie verlieren ihren Kunden, sobald sie das nächste Mal bearbeitet werden.
+     Dann nicht weitermachen und die Zahl (Screenshot) an Claude schicken.
   1. Supabase > SQL Editor > New query. Den Inhalt von supabase/03_lw_ordner.sql einfügen > Run.
      Das Skript darf gefahrlos noch einmal ausgeführt werden.
   2. Danach eine neue Query mit dem Inhalt von supabase/02_lw_pruefen.sql > Run und die
@@ -80,15 +85,20 @@ Update: Ordner (03_lw_ordner.sql)
      - RLS: 5 Zeilen (lw_ordner, lw_profile, lw_quests, lw_tasks, lw_zeiten), überall "an"
      - anon: 5 Zeilen mit "kein Zugriff"
      - Regeln (Policies): lw_ordner 4, lw_profile 3, lw_quests 4, lw_tasks 4, lw_zeiten 4
-     - Trigger: alle "aktiv" (u. a. lw_ordner_struktur, lw_tasks_ordner, lw_tasks_kunde_zeiten)
+     - Trigger: alle "aktiv" (u. a. lw_ordner_struktur, lw_tasks_ordner, lw_tasks_kunde_zeiten,
+       lw_zeiten_kunde_von_aufgabe)
+     - Funktion lw_ordner_einrichten: "anon: nein, authenticated: nein" – das ist richtig
+       (sie ist nur intern; bei den anderen Funktionen ist "authenticated: ja" richtig)
      - Spalte lw_tasks.ordner_id: "vorhanden"
      Steht irgendwo "AUS", "FEHLT", "ZUGRIFF!", "AUSFÜHRBAR!", "NEIN" oder "inaktiv",
-     nicht weitermachen und Luca Bescheid geben.
-  3. Was mit den bestehenden Daten passiert:
+     nicht weitermachen und den Screenshot an Claude schicken.
+  Info (nichts zu tun) – was mit den bestehenden Daten passiert:
      - Quests mit "Firma" bekommen die Ordner Intern und Extern.
      - Aufgaben mit Kunde wandern nach Extern > (Kunde) > "Allgemein".
      - Zeiteinträge bleiben unverändert.
-  4. Erst danach die neue App-Version auf GitHub hochladen (siehe "Updates").
+  3. Erst danach die neue App-Version auf GitHub hochladen (siehe "Updates").
+  4. Nach dem Hochladen die App auf jedem Gerät einmal neu laden (Lucas und Kais Geräte,
+     auch Handy). Falls noch das Alte erscheint: Strg/Cmd + Umschalt + R.
 
 Updates
   Geänderte Dateien erneut auf GitHub hochladen (gleicher Name ersetzt die alte Datei).

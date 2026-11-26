@@ -87,7 +87,8 @@ window.LW = window.LW || {};
       <ul class="rb-tasks">${tasks}</ul></details></li>`;
   }
 
-  /* Intern / Extern: ein geteilter Balken. Zeit ohne Ordner oder ohne Aufgabe zählt als intern (Summe = Gesamt). */
+  /* Intern / Extern: ein geteilter Balken. Zeit ohne Ordner oder ohne Aufgabe zählt als intern (Summe = Gesamt).
+     Nur mit Ordnern (03_lw_ordner.sql ausgeführt) – vorher wäre alles „Intern 100 %“. */
   function bereichZeile(f) {
     const g = f.gesamtSek, i = f.internSek, x = f.externSek;
     const w = v => (g ? v / g * 100 : 0).toFixed(1);
@@ -118,7 +119,7 @@ window.LW = window.LW || {};
         <div><dt>Anteil abrechenbar</dt><dd class="zahl">${f.gesamtSek ? pct(ab, f.gesamtSek) : '–'}</dd></div>
         <div><dt>Nicht abrechenbar</dt><dd class="zahl">${dauer(nicht)}</dd></div>
       </dl>
-      ${f.gesamtSek ? bereichZeile(f) : ''}
+      ${f.gesamtSek && DB.ordnerVerfuegbar === true ? bereichZeile(f) : ''}
       ${f.gesamtSek ? `<div class="rb-zwei">
         <div><h3>Je Kunde</h3><p class="rb-legende">Balken: Gesamt, dunkel abrechenbar. Prozent: Anteil abrechenbar.</p><ul class="rb-liste">${zeilen(f.kunden, x => x.kunde ? x.kunde.name : 'Ohne Kunde')}</ul></div>
         <div><h3>Je Person</h3><ul class="rb-liste">${zeilen(f.personen, x => personName(x.user_id))}</ul></div>

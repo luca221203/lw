@@ -188,7 +188,7 @@ window.LW = window.LW || {};
       });
     }
     const gibt = id => quests.some(q => q.id === id);
-    const ordnerAlle = s.ordner || [], mitOrdner = DB.ordnerVerfuegbar !== false;
+    const ordnerAlle = s.ordner || [], mitOrdner = DB.ordnerVerfuegbar === true;
     const ordnerVon = id => ordnerAlle.find(o => o.id === id);
     const vorOrdner = !t && vorgaben.ordner_id ? ordnerVon(vorgaben.ordner_id) : null;
     const questId = t ? t.quest_id : [vorgaben.quest_id, vorOrdner && vorOrdner.quest_id, letzteQuest()].find(gibt) || quests[0].id;
