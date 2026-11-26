@@ -142,7 +142,7 @@ window.LW = window.LW || {};
 
     const api = {
       demo: false,
-      ordnerVerfuegbar: true,
+      ordnerVerfuegbar: null, // unbekannt, bis ordner() gelaufen ist; true = 03_lw_ordner.sql ist ausgeführt
       linkTyp() { const t = linkTyp; linkTyp = null; return t; },
       async session() { const { data } = await sb.auth.getSession(); return data.session; },
       onAuth(cb) { sb.auth.onAuthStateChange((e, s) => { if (e === 'PASSWORD_RECOVERY') linkTyp = 'recovery'; if (!s) meCache = null; cb(s); }); },
@@ -188,13 +188,14 @@ window.LW = window.LW || {};
       tasks() { return alle(() => sb.from('lw_tasks').select('*').order('sortierung').order('created_at').order('id')); },
       async saveTask(t) {
         const felder = pick(t, TASK_FELDER);
-        if (!api.ordnerVerfuegbar) delete felder.ordner_id; // Spalte gibt es erst nach 03_lw_ordner.sql
+        if (api.ordnerVerfuegbar !== true) delete felder.ordner_id; // Spalte gibt es erst nach 03_lw_ordner.sql
         const q = t.id ? sb.from('lw_tasks').update(felder).eq('id', t.id) : sb.from('lw_tasks').insert(felder);
         const { data, error } = await q.select().single(); fehler(error); return data;
       },
       async deleteTask(id) { const { error } = await sb.from('lw_tasks').delete().eq('id', id); fehler(error, true); },
 
-      /* Alle sichtbaren Ordner, auch archivierte. Fehlt die Tabelle noch: [] und ordnerVerfuegbar = false. */
+      /* Alle sichtbaren Ordner, auch archivierte. Fehlt die Tabelle noch: [] und ordnerVerfuegbar = false.
+         Bei einem anderen Fehler bleibt ordnerVerfuegbar, wie es war. */
       async ordner() {
         let fehlt = false;
         const liste = await window.LW.logic.alleSeiten(async (von, bis) => {
@@ -240,11 +241,16 @@ window.LW = window.LW || {};
           jetzt = Math.max(jetzt, new Date(lauf.start).getTime() + 1000);
           await stoppeTimer(lauf.id, new Date(jetzt).toISOString());
         }
-        const qr = await sb.from('lw_quests').select('firma').eq('id', task.quest_id).single(); fehler(qr.error);
+        // Aufgabe frisch lesen: sie kann inzwischen (z. B. auf einem anderen Gerät) umsortiert worden sein.
+        // Die Datenbank setzt den Kunden ohnehin selbst (lw_zeiten_kunde_von_aufgabe), das hier hält
+        // den Standard für "abrechenbar" passend.
+        const tr = await sb.from('lw_tasks').select('quest_id, kunde_id').eq('id', task.id).single(); fehler(tr.error);
+        const qr = await sb.from('lw_quests').select('firma').eq('id', tr.data.quest_id).single(); fehler(qr.error);
+        const kunde = tr.data.kunde_id || null;
         const neu = {
-          quest_id: task.quest_id, task_id: task.id, kunde_id: task.kunde_id || null,
+          quest_id: tr.data.quest_id, task_id: task.id, kunde_id: kunde,
           start: new Date(jetzt).toISOString(), ende: null,
-          abrechenbar: !!(qr.data.firma && task.kunde_id)
+          abrechenbar: !!(qr.data.firma && kunde)
         };
         const { data, error } = await sb.from('lw_zeiten').insert(neu).select().single();
         if (error && error.code === '23505') return laufend(); // läuft schon (z. B. auf anderem Gerät)
@@ -540,17 +546,37 @@ window.LW = window.LW || {};
       }
     }
 
+    // Trigger lw_zeiten_kunde_von_aufgabe (n = neue Zeile, alt = vorher oder null): Eintrag mit Aufgabe bekommt
+    // immer deren Kunden; weicht der geschickte Kunde ab, wird "abrechenbar" auf den Standard gesetzt.
+    function zeitKundeVonAufgabe(n, alt) {
+      if (!n.task_id) return;
+      if (alt && gesperrt(alt)) return; // pruefeZeit lehnt ab
+      if (alt && n.kunde_id == null && alt.kunde_id != null && !kundeGibtEs(alt.kunde_id)) return; // Kunde gelöscht
+      const t = tasks.find(x => x.id === n.task_id);
+      if (!t) return; // pruefeZeit meldet die Zuordnung
+      const q = questById(t.quest_id);
+      let kunde = t.kunde_id == null ? null : t.kunde_id;
+      if (kunde != null && !kundeGibtEs(kunde)) kunde = null;
+      if ((n.kunde_id == null ? null : n.kunde_id) !== kunde) {
+        n.kunde_id = kunde;
+        n.abrechenbar = !!(q && q.firma && kunde != null);
+      }
+    }
+
     async function saveZeit(z) {
       if (z.id) {
         const alt = zeiten.find(x => x.id === z.id && x.user_id === me.id);
         if (!alt) throw new Error('Der Eintrag wurde nicht gefunden oder ist nicht zugänglich.');
-        const neu = { ...alt, ...pick(z, ZEIT_FELDER) };
+        const patch = pick(z, ZEIT_FELDER);
+        const neu = { ...alt, ...patch };
+        if ('kunde_id' in patch || 'task_id' in patch) zeitKundeVonAufgabe(neu, alt); // "update of kunde_id, task_id"
         pruefeZeit(neu, alt);
         Object.assign(alt, neu);
         return wait(alt);
       }
       const neu = { id: uid(), user_id: me.id, kunde_id: null, ende: null, abrechenbar: false, notiz: null, rechnung_id: null, task_id: null, start: new Date().toISOString(), ...pick(z, ZEIT_FELDER) };
       if (!sichtbar(questById(neu.quest_id))) throw new Error(MSG_NICHT_SICHTBAR);
+      zeitKundeVonAufgabe(neu, null);
       pruefeZeit(neu, null);
       zeiten.push(neu);
       return wait(neu);
@@ -692,11 +718,13 @@ window.LW = window.LW || {};
           jetzt = Math.max(jetzt, new Date(lauf.start).getTime() + 1000);
           await stoppeTimer(lauf.id, new Date(jetzt).toISOString());
         }
-        const q = questById(task.quest_id);
+        // wie Supabase: Aufgabe frisch lesen (das übergebene Objekt kann veraltet sein)
+        const t = tasks.find(x => x.id === task.id) || task;
+        const q = questById(t.quest_id);
         if (!q) throw new Error(MSG_NICHT_SICHTBAR);
         return saveZeit({
-          quest_id: task.quest_id, task_id: task.id, kunde_id: task.kunde_id || null,
-          start: new Date(jetzt).toISOString(), ende: null, abrechenbar: !!(q.firma && task.kunde_id)
+          quest_id: t.quest_id, task_id: t.id, kunde_id: t.kunde_id || null,
+          start: new Date(jetzt).toISOString(), ende: null, abrechenbar: !!(q.firma && t.kunde_id)
         });
       },
       stoppeTimer,

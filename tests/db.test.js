@@ -389,4 +389,61 @@
     await D().deleteOrdner(proj.id);
     await D().deleteQuest(p.id);
   });
+
+  /* Zeit folgt der Aufgabe auch bei veraltetem Client-Stand (Trigger lw_zeiten_kunde_von_aufgabe) */
+  t('ordner: Timer mit veralteter Aufgabe nimmt aktuellen Kunden', async function () {
+    await stoppeAlles();
+    var med = await quest('Mediawo');
+    var marketing = await ordnerNamens('Mediawo', 'Marketing');
+    var website = await ordnerNamens('Mediawo', 'Website');
+    var sus = await ordnerNamens('Mediawo', SUSANNE);
+    var a = await D().saveTask({ quest_id: med.id, titel: 'Veraltet-Timer', ordner_id: website.id });
+    eq(a.kunde_id, sus.kunde_id, 'Seed: Kunde Susanne');
+    var alt = Object.assign({}, a); // Stand eines anderen Geräts
+    await D().saveTask({ id: a.id, ordner_id: marketing.id }); // inzwischen nach Intern umsortiert
+    var z = await D().starteTimer(alt);
+    eq([z.kunde_id, z.abrechenbar], [null, false], 'Intern: kein Kunde, nicht abrechenbar');
+    await stoppeAlles();
+
+    var alt2 = Object.assign({}, await aufgabe('Veraltet-Timer')); // kunde_id null
+    await D().saveTask({ id: a.id, ordner_id: website.id });
+    var z2 = await D().starteTimer(alt2);
+    eq([z2.kunde_id, z2.abrechenbar], [sus.kunde_id, true], 'zurück bei Susanne: Kunde und Standard');
+    await stoppeAlles();
+  });
+
+  t('ordner: Zeit speichern mit veraltetem Kunden behält Kunden der Aufgabe', async function () {
+    await stoppeAlles();
+    var med = await quest('Mediawo');
+    var marketing = await ordnerNamens('Mediawo', 'Marketing');
+    var website = await ordnerNamens('Mediawo', 'Website');
+    var sus = await ordnerNamens('Mediawo', SUSANNE);
+    var a = await D().saveTask({ quest_id: med.id, titel: 'Veraltet-Zeit', ordner_id: marketing.id });
+    var start = new Date(Date.now() - 3 * 3600e3).toISOString(), ende = new Date(Date.now() - 2 * 3600e3).toISOString();
+
+    // Nachtragen mit falschem Kunden: Kunde der Aufgabe, abrechenbar auf Standard
+    var n = await D().saveZeit({ quest_id: med.id, task_id: a.id, kunde_id: sus.kunde_id, start: start, ende: ende, abrechenbar: true });
+    eq([n.kunde_id, n.abrechenbar], [null, false], 'Nachtragen mit falschem Kunden');
+    // richtiger Kunde: "abrechenbar" bleibt wie geschickt
+    var n2 = await D().saveZeit({ quest_id: med.id, task_id: a.id, kunde_id: null, start: start, ende: ende, abrechenbar: true });
+    eq([n2.kunde_id, n2.abrechenbar], [null, true], 'passender Kunde: abrechenbar wie geschickt');
+
+    // Dialog offen, Aufgabe wird woanders umsortiert, dann mit altem Kunden gespeichert
+    await D().saveTask({ id: a.id, ordner_id: website.id });
+    var z = (await zeitenVon(a.id)).find(function (x) { return x.id === n.id; });
+    eq([z.kunde_id, z.abrechenbar], [sus.kunde_id, true], 'Zeit ist mitgewandert');
+    await D().saveTask({ id: a.id, ordner_id: marketing.id }); // und wieder zurück nach Intern
+    var r = await D().saveZeit({ id: n.id, quest_id: med.id, task_id: a.id, kunde_id: sus.kunde_id, abrechenbar: true, notiz: 'alt' });
+    eq([r.kunde_id, r.abrechenbar, r.notiz], [null, false, 'alt'], 'veralteter Kunde zählt nicht');
+    // ohne kunde_id (wie der Dialog jetzt bei unveränderter Aufgabe): Kunde bleibt, abrechenbar wie geschickt
+    var r2 = await D().saveZeit({ id: n.id, quest_id: med.id, task_id: a.id, abrechenbar: true });
+    eq([r2.kunde_id, r2.abrechenbar], [null, true]);
+
+    // gesperrte Zeit bleibt gesperrt, auch wenn Kunde/Aufgabe mitgeschickt werden
+    var gesperrt = (await D().zeiten(iso(-30), iso(0))).find(function (x) { return x.rechnung_id && x.user_id === 'u-luca'; });
+    ok(gesperrt, 'Seed: abgerechnete Zeit');
+    var vorher = Object.assign({}, gesperrt);
+    eq(await fehler(D().saveZeit({ id: gesperrt.id, quest_id: gesperrt.quest_id, task_id: gesperrt.task_id, kunde_id: null })), 'Diese Zeit ist abgerechnet und gesperrt.');
+    eq((await D().zeiten(iso(-30), iso(0))).find(function (x) { return x.id === gesperrt.id; }), vorher, 'unverändert');
+  });
 })();

@@ -15,6 +15,9 @@
 --     sich, übernehmen alle nicht abgerechneten Zeiteinträge der Aufgabe
 --     (auch die von Kai) den neuen Kunden und "abrechenbar" wird auf den
 --     Standard gesetzt ("Zeit wandert mit der Aufgabe")
+--   - neue und bearbeitete Zeiteinträge mit Aufgabe bekommen immer den
+--     aktuellen Kunden der Aufgabe (Trigger lw_zeiten_kunde_von_aufgabe),
+--     auch wenn ein Gerät noch einen veralteten Stand hat
 --   - "Firma" an/aus legt Intern/Extern an bzw. löst sie wieder auf
 --   - bestehende Daten: Firma-Quests bekommen Intern/Extern, Aufgaben
 --     mit Kunde wandern nach Extern → (Kunde) → "Allgemein".
@@ -381,6 +384,76 @@ drop trigger if exists lw_tasks_kunde_zeiten on public.lw_tasks;
 create trigger lw_tasks_kunde_zeiten after update on public.lw_tasks
 for each row when (old.kunde_id is distinct from new.kunde_id)
 execute function public.lw_tasks_kunde_zeiten();
+
+-- ---------------------------------------------------------------------
+-- Zeit folgt der Aufgabe, auch bei neuen und bearbeiteten Einträgen:
+-- Hat ein Eintrag eine Aufgabe, ist sein Kunde IMMER der Kunde dieser
+-- Aufgabe – ein veralteter Wert vom Client (Aufgabe wurde inzwischen,
+-- z. B. auf einem anderen Gerät, umsortiert) zählt nicht.
+-- Schickt der Client einen anderen Kunden als den der Aufgabe, wird
+-- "abrechenbar" auf den Standard gesetzt (Firma-Quest und Kunde), weil
+-- seine Auswahl für den falschen Kunden galt. Stimmt der Kunde, bleibt
+-- "abrechenbar", wie geschickt (auch ein von Hand umgeschaltetes).
+-- Beim Ändern feuert der Trigger nur, wenn kunde_id oder task_id
+-- mitgeschickt werden; fehlt kunde_id, gilt der bisherige Wert der
+-- Zeile als "geschickt". Einträge ohne Aufgabe: unverändert.
+-- Gesperrte Einträge (wie lw_zeiten_sperre) fasst er nicht an; die
+-- Änderung lehnt danach lw_zeiten_sperre wie bisher ab ("Diese Zeit ist
+-- abgerechnet und gesperrt."). Er selbst meldet keine Fehler – eine
+-- fehlende oder fremde Aufgabe meldet lw_zeiten_zuordnung.
+-- Passt zu lw_tasks_kunde_zeiten: dort wird kunde_id auf den neuen
+-- Kunden der Aufgabe gesetzt (die Aufgabe ist dann schon geändert),
+-- also genau der Wert, den dieser Trigger verlangt – er ändert nichts.
+-- Löscht Mediawo OS den Kunden (Fremdschlüssel setzt null), bleibt es
+-- bei null und "abrechenbar" unverändert.
+-- security definer, damit Aufgabe und Quest immer gelesen werden können.
+-- ---------------------------------------------------------------------
+create or replace function public.lw_zeiten_kunde_von_aufgabe()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_kunde  uuid;
+  v_firma  boolean;
+begin
+  if new.task_id is null then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' then
+    -- gesperrt: nichts tun, lw_zeiten_sperre lehnt danach ab
+    if old.rechnung_id is not null
+       and not exists (select 1 from public.rechnungen r
+                        where r.id = old.rechnung_id and r.status = 'storniert') then
+      return new;
+    end if;
+    -- Kunde in Mediawo OS gelöscht: kein Umsortieren
+    if new.kunde_id is null and old.kunde_id is not null
+       and not exists (select 1 from public.kunden where id = old.kunde_id) then
+      return new;
+    end if;
+  end if;
+
+  select t.kunde_id, coalesce(q.firma, false)
+    into v_kunde, v_firma
+    from public.lw_tasks t
+    join public.lw_quests q on q.id = t.quest_id
+   where t.id = new.task_id;
+  if not found then
+    return new;
+  end if;
+  if v_kunde is not null
+     and not exists (select 1 from public.kunden where id = v_kunde) then
+    v_kunde := null;
+  end if;
+
+  if new.kunde_id is distinct from v_kunde then
+    new.kunde_id    := v_kunde;
+    new.abrechenbar := v_firma and v_kunde is not null;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists lw_zeiten_kunde_von_aufgabe on public.lw_zeiten;
+create trigger lw_zeiten_kunde_von_aufgabe before insert or update of kunde_id, task_id on public.lw_zeiten
+for each row execute function public.lw_zeiten_kunde_von_aufgabe();
 
 -- ---------------------------------------------------------------------
 -- Hilfsfunktion (nur intern, nicht aus der App aufrufbar):

@@ -16,7 +16,8 @@
 --               lw_ordner_loeschen, lw_ordner_struktur,
 --               lw_quests_besitzer_fest, lw_quests_firma,
 --               lw_tasks_ersteller_fest, lw_tasks_kunde_zeiten,
---               lw_tasks_ordner, lw_tasks_quest_fest, lw_zeiten_sperre,
+--               lw_tasks_ordner, lw_tasks_quest_fest,
+--               lw_zeiten_kunde_von_aufgabe, lw_zeiten_sperre,
 --               lw_zeiten_zuordnung – alle "aktiv"
 --   - Rechte authenticated: lw_profile "INSERT, SELECT, UPDATE",
 --               die anderen vier "DELETE, INSERT, SELECT, UPDATE"

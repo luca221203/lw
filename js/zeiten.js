@@ -227,22 +227,25 @@ window.LW = window.LW || {};
       const endeIso = zeit && zeit.ende && !korrektur && uhrzeit(ende) === f.bis.value && endeTag === L.isoTag(b.e) ? zeit.ende : b.e.toISOString();
       const basis = { start: startIso, ende: endeIso, notiz: f.notiz.value.trim() || null };
       let daten;
+      /* kunde_id nur schicken, wenn sich Quest oder Aufgabe ändern: sonst bliebe der beim Öffnen geladene
+         (inzwischen vielleicht veraltete) Kunde stehen. Mit Aufgabe setzt die Datenbank den Kunden ohnehin
+         selbst (lw_zeiten_kunde_von_aufgabe). */
       if (sel.fremd) { // bisherige Zuordnung unverändert lassen
         daten = {
           quest_id: fremd.questId, task_id: fremd.taskId,
-          kunde_id: zeit ? zeit.kunde_id || null : (fremd.task && fremd.task.kunde_id) || null,
           abrechenbar: fremd.quest ? !!fremd.quest.firma && f.abrechenbar.checked : !!(zeit && zeit.abrechenbar),
           ...basis
         };
+        if (!zeit) daten.kunde_id = (fremd.task && fremd.task.kunde_id) || null;
       } else {
         const { quest, task } = sel;
         const gleicheAufgabe = zeit && (zeit.task_id || null) === (task ? task.id : null) && zeit.quest_id === quest.id;
         daten = {
           quest_id: quest.id, task_id: task ? task.id : null,
-          kunde_id: quest.firma ? (gleicheAufgabe ? zeit.kunde_id || null : (task && task.kunde_id) || null) : null,
           abrechenbar: !!quest.firma && f.abrechenbar.checked,
           ...basis
         };
+        if (!gleicheAufgabe) daten.kunde_id = quest.firma ? (task && task.kunde_id) || null : null;
       }
       LW.dialoge.senden(f, async () => {
         await DB.saveZeit(neu ? daten : { id: zeit.id, ...daten });
