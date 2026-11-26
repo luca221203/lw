@@ -141,4 +141,252 @@
       eq(kaiNachher, kaiVorher, 'Kais Zeiten bleiben für den Besitzer sichtbar');
     } finally { await D().saveQuest({ id: med.id, geteilt: true }); }
   });
+  /* ---------------- Ordner ---------------- */
+  async function quest(name) {
+    return (await D().quests()).find(function (x) { return x.name === name; });
+  }
+  async function ordnerVon(questName) {
+    var q = await quest(questName);
+    return (await D().ordner()).filter(function (o) { return o.quest_id === q.id; });
+  }
+  async function ordnerNamens(questName, name) {
+    return (await ordnerVon(questName)).find(function (o) { return o.name === name; });
+  }
+  async function zeitenVon(taskId) {
+    return (await D().zeiten(iso(-30), iso(0))).filter(function (z) { return z.task_id === taskId; });
+  }
+  var SUSANNE = 'Susanne Kreutz', DEFORIS = 'DeFORIS Unternehmensberatung (Sebastian Tsoleridis)';
+
+  t('ordner: Beispielstruktur', async function () {
+    eq(D().ordnerVerfuegbar, true);
+    var m = await ordnerVon('Mediawo');
+    var intern = m.filter(function (o) { return o.art === 'intern'; });
+    var extern = m.filter(function (o) { return o.art === 'extern'; });
+    eq(intern.length, 1, 'ein Intern');
+    eq(extern.length, 1, 'ein Extern');
+    eq(intern[0].name, 'Intern');
+    eq(extern[0].name, 'Extern');
+    var sus = m.find(function (o) { return o.art === 'kunde' && o.name === SUSANNE; });
+    ok(sus && sus.eltern_id === extern[0].id && sus.kunde_id, 'Susanne unter Extern');
+    eq(m.filter(function (o) { return o.eltern_id === sus.id; }).map(function (o) { return o.art + ':' + o.name; }).sort(), ['projekt:Reels', 'projekt:Website']);
+    var def = m.find(function (o) { return o.art === 'kunde' && o.name === DEFORIS; });
+    ok(def && def.eltern_id === extern[0].id, 'DeFORIS unter Extern');
+    eq(m.filter(function (o) { return o.eltern_id === def.id; }).map(function (o) { return o.name; }), ['Angebot']);
+    eq(m.filter(function (o) { return o.eltern_id === intern[0].id; }).map(function (o) { return o.name; }), ['Marketing']);
+    var master = await ordnerVon('Master');
+    eq(master.map(function (o) { return o.art + ':' + o.name + ':' + o.eltern_id; }), ['projekt:Thesis:null']);
+    eq((await ordnerVon('Sport')).length, 0);
+    // Aufgaben einsortiert, Kunde aus dem Ordner
+    var reel = await aufgabe('Reel für Kreutz schneiden');
+    eq(reel.ordner_id, (await ordnerNamens('Mediawo', 'Reels')).id);
+    eq(reel.kunde_id, sus.kunde_id);
+    eq((await aufgabe('Angebot DeFORIS nachfassen')).kunde_id, def.kunde_id);
+    eq((await aufgabe('Rechnung prüfen')).ordner_id, null, 'eine Mediawo-Aufgabe ohne Ordner');
+  });
+
+  t('ordner: Kunde folgt Ordner', async function () {
+    var med = await quest('Mediawo');
+    var website = await ordnerNamens('Mediawo', 'Website');
+    var marketing = await ordnerNamens('Mediawo', 'Marketing');
+    var sus = await ordnerNamens('Mediawo', SUSANNE);
+    var def = await ordnerNamens('Mediawo', DEFORIS);
+    var a = await D().saveTask({ quest_id: med.id, titel: 'Ordnertest Kunde', ordner_id: website.id, kunde_id: def.kunde_id });
+    eq(a.ordner_id, website.id);
+    eq(a.kunde_id, sus.kunde_id, 'Kunde aus dem Ordner, nicht vom Client');
+    var b = await D().saveTask({ id: a.id, ordner_id: marketing.id });
+    eq(b.kunde_id, null);
+    var c = await D().saveTask({ id: a.id, ordner_id: sus.id });
+    eq(c.kunde_id, sus.kunde_id, 'direkt im Kunden-Ordner');
+    var d = await D().saveTask({ id: a.id, ordner_id: null });
+    eq(d.kunde_id, null, 'ohne Ordner kein Kunde');
+    var fremd = (await ordnerVon('Master'))[0];
+    eq(await fehler(D().saveTask({ id: a.id, ordner_id: fremd.id })), 'Dieser Ordner gehört zu einer anderen Quest.');
+    eq(await fehler(D().saveTask({ id: a.id, ordner_id: 'gibt-es-nicht' })), 'Diesen Ordner gibt es nicht.');
+    await D().deleteTask(a.id);
+  });
+
+  t('ordner: Umsortieren nimmt Zeit mit', async function () {
+    var task = await aufgabe('Newsletter-Vorlage');
+    var marketing = await ordnerNamens('Mediawo', 'Marketing');
+    var website = await ordnerNamens('Mediawo', 'Website');
+    var reels = await ordnerNamens('Mediawo', 'Reels');
+    var sus = await ordnerNamens('Mediawo', SUSANNE);
+    eq(task.ordner_id, marketing.id, 'Seed: in Marketing');
+    var vorher = await zeitenVon(task.id);
+    var luca = vorher.find(function (z) { return z.user_id === 'u-luca' && !z.rechnung_id; });
+    var kai = vorher.find(function (z) { return z.user_id === 'u-kai'; });
+    var gebucht = vorher.find(function (z) { return z.rechnung_id; });
+    ok(luca && kai && gebucht, 'Seed: Luca, Kai und abgerechneter Eintrag');
+    eq([luca.kunde_id, luca.abrechenbar, kai.kunde_id, kai.abrechenbar], [null, false, null, false]);
+
+    var r = await D().saveTask({ id: task.id, ordner_id: website.id });
+    eq(r.kunde_id, sus.kunde_id);
+    var nach = await zeitenVon(task.id);
+    var l2 = nach.find(function (z) { return z.id === luca.id; });
+    var k2 = nach.find(function (z) { return z.id === kai.id; });
+    var g2 = nach.find(function (z) { return z.id === gebucht.id; });
+    eq([l2.kunde_id, l2.abrechenbar], [sus.kunde_id, true], 'Lucas Eintrag');
+    eq([k2.kunde_id, k2.abrechenbar], [sus.kunde_id, true], 'Kais Eintrag');
+    eq(g2, gebucht, 'abgerechneter Eintrag unverändert');
+
+    await D().saveZeit({ id: luca.id, abrechenbar: false });
+    await D().saveTask({ id: task.id, ordner_id: reels.id });
+    var nach2 = await zeitenVon(task.id);
+    eq(nach2.find(function (z) { return z.id === luca.id; }).abrechenbar, false, 'von Hand umgeschaltet bleibt');
+    eq(nach2.find(function (z) { return z.id === kai.id; }).abrechenbar, true);
+    eq(nach2.find(function (z) { return z.id === gebucht.id; }), gebucht);
+  });
+
+  t('ordner: laufender Timer zieht mit', async function () {
+    await stoppeAlles();
+    var med = await quest('Mediawo');
+    var marketing = await ordnerNamens('Mediawo', 'Marketing');
+    var website = await ordnerNamens('Mediawo', 'Website');
+    var sus = await ordnerNamens('Mediawo', SUSANNE);
+    var a = await D().saveTask({ quest_id: med.id, titel: 'Timertest Ordner', ordner_id: marketing.id });
+    var z = await D().starteTimer(a);
+    eq([z.kunde_id, z.abrechenbar], [null, false]);
+    await D().saveTask({ id: a.id, ordner_id: website.id });
+    var l = await D().laufend();
+    eq(l.id, z.id);
+    eq([l.kunde_id, l.abrechenbar, l.ende], [sus.kunde_id, true, null]);
+    await stoppeAlles();
+  });
+
+  t('ordner: Projekt umziehen nimmt Kunden mit', async function () {
+    var angebot = await ordnerNamens('Mediawo', 'Angebot');
+    var sus = await ordnerNamens('Mediawo', SUSANNE);
+    var def = await ordnerNamens('Mediawo', DEFORIS);
+    var intern = (await ordnerVon('Mediawo')).find(function (o) { return o.art === 'intern'; });
+    var carousel = await aufgabe('Carousel-Entwurf');
+    eq(carousel.ordner_id, angebot.id, 'Seed: Carousel in Angebot');
+    var kaiZeit = (await zeitenVon(carousel.id)).find(function (z) { return z.user_id === 'u-kai'; });
+    ok(kaiZeit, 'Seed: Kai hat Zeit auf Carousel');
+    await D().saveOrdner({ id: angebot.id, eltern_id: intern.id });
+    eq((await aufgabe('Carousel-Entwurf')).kunde_id, null);
+    var z1 = (await zeitenVon(carousel.id)).find(function (z) { return z.id === kaiZeit.id; });
+    eq([z1.kunde_id, z1.abrechenbar], [null, false]);
+    await D().saveOrdner({ id: angebot.id, eltern_id: sus.id });
+    eq((await aufgabe('Carousel-Entwurf')).kunde_id, sus.kunde_id);
+    await D().saveOrdner({ id: angebot.id, eltern_id: def.id });
+    eq((await aufgabe('Carousel-Entwurf')).kunde_id, def.kunde_id);
+    var z2 = (await zeitenVon(carousel.id)).find(function (z) { return z.id === kaiZeit.id; });
+    eq([z2.kunde_id, z2.abrechenbar], [def.kunde_id, true]);
+  });
+
+  t('ordner: Struktur wird geprüft', async function () {
+    var med = await quest('Mediawo');
+    var m = await ordnerVon('Mediawo');
+    var intern = m.find(function (o) { return o.art === 'intern'; });
+    var extern = m.find(function (o) { return o.art === 'extern'; });
+    var website = m.find(function (o) { return o.name === 'Website'; });
+    var sus = m.find(function (o) { return o.name === SUSANNE; });
+    var atelier = (await D().kunden()).find(function (k) { return k.name === 'Atelier dentaire Arnoldy S.à r.l.'; });
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'kunde', kunde_id: atelier.id, eltern_id: intern.id })), 'Hier kann dieser Ordner nicht liegen.');
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'intern', name: 'Intern' })), 'Intern und Extern werden automatisch angelegt.');
+    eq(await fehler(D().saveOrdner({ id: extern.id, name: 'Draußen' })), 'Intern und Extern können nicht geändert werden.');
+    eq(await fehler(D().saveOrdner({ id: intern.id, archiviert: true })), 'Intern und Extern können nicht geändert werden.');
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'projekt', name: 'Lose' })), 'Hier kann dieser Ordner nicht liegen.');
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'projekt', name: 'Tief', eltern_id: website.id })), 'Hier kann dieser Ordner nicht liegen.');
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'projekt', name: '   ', eltern_id: intern.id })), 'Bitte einen Namen eingeben.');
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'kunde', eltern_id: extern.id })), 'Bitte einen Kunden wählen.');
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'kunde', eltern_id: extern.id, kunde_id: sus.kunde_id })), 'Für diesen Kunden gibt es in dieser Quest schon einen Ordner.');
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'projekt', name: 'X', eltern_id: intern.id, kunde_id: sus.kunde_id })), 'Nur Kunden-Ordner haben einen Kunden.');
+    eq(await fehler(D().saveOrdner({ id: website.id, art: 'kunde' })), 'Art und Quest eines Ordners können nicht geändert werden.');
+    eq(await fehler(D().saveOrdner({ id: sus.id, kunde_id: atelier.id })), 'Der Kunde eines Ordners kann nicht geändert werden.');
+    var master = (await ordnerVon('Master'))[0];
+    eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'projekt', name: 'Quer', eltern_id: master.id })), 'Dieser Ordner gehört zu einer anderen Quest.');
+    // Kunden-Ordner: Name kommt aus kunden
+    var neu = await D().saveOrdner({ quest_id: med.id, art: 'kunde', kunde_id: atelier.id, eltern_id: extern.id, name: 'egal' });
+    eq([neu.name, neu.eltern_id, neu.archiviert], [atelier.name, extern.id, false]);
+    // Projekt: Name getrimmt, Umbenennen geht
+    var p = await D().saveOrdner({ quest_id: med.id, art: 'projekt', name: '  Implantate  ', eltern_id: neu.id });
+    eq(p.name, 'Implantate');
+    eq((await D().saveOrdner({ id: p.id, name: 'Prothetik' })).name, 'Prothetik');
+    eq((await ordnerNamens('Mediawo', 'Prothetik')).id, p.id);
+  });
+
+  t('ordner: Löschen nur leer', async function () {
+    var med = await quest('Mediawo');
+    var m = await ordnerVon('Mediawo');
+    var intern = m.find(function (o) { return o.art === 'intern'; });
+    var website = m.find(function (o) { return o.name === 'Website'; });
+    var sus = m.find(function (o) { return o.name === SUSANNE; });
+    var msg = 'Der Ordner ist nicht leer. Archiviere ihn stattdessen.';
+    eq(await fehler(D().deleteOrdner(website.id)), msg);
+    eq(await fehler(D().deleteOrdner(sus.id)), msg, 'hat Unterordner');
+    eq(await fehler(D().deleteOrdner(intern.id)), 'Intern und Extern können nicht geändert werden.');
+    var leer = await D().saveOrdner({ quest_id: med.id, art: 'projekt', name: 'Leer', eltern_id: intern.id });
+    await D().deleteOrdner(leer.id);
+    eq(await ordnerNamens('Mediawo', 'Leer'), undefined);
+    ok(await ordnerNamens('Mediawo', 'Website'), 'Website noch da');
+  });
+
+  t('ordner: Archiv vererbt sich', async function () {
+    var med = await quest('Mediawo');
+    var sus = await ordnerNamens('Mediawo', SUSANNE);
+    var website = await ordnerNamens('Mediawo', 'Website');
+    var reels = await ordnerNamens('Mediawo', 'Reels');
+    var texte = await aufgabe('Website-Texte für Kreutz');
+    eq(texte.ordner_id, website.id, 'Seed: Texte in Website');
+    await D().saveOrdner({ id: sus.id, archiviert: true });
+    try {
+      eq([(await ordnerNamens('Mediawo', 'Website')).archiviert, (await ordnerNamens('Mediawo', 'Reels')).archiviert], [true, true]);
+      eq(await fehler(D().saveTask({ quest_id: med.id, titel: 'Archivtest', ordner_id: website.id })), 'In einen archivierten Ordner kann nichts einsortiert werden.');
+      eq(await aufgabe('Archivtest'), undefined);
+      eq(await fehler(D().saveTask({ id: (await aufgabe('Rechnung prüfen')).id, ordner_id: reels.id })), 'In einen archivierten Ordner kann nichts einsortiert werden.');
+      eq(await fehler(D().saveOrdner({ quest_id: med.id, art: 'projekt', name: 'Neu', eltern_id: sus.id })), 'In einen archivierten Ordner kann nichts einsortiert werden.');
+      eq(await fehler(D().saveOrdner({ id: website.id, archiviert: false })), 'Der übergeordnete Ordner ist archiviert.');
+      eq((await D().saveTask({ id: texte.id, titel: 'Website-Texte für Kreutz', notiz: 'liegt im Archiv' })).ordner_id, website.id, 'Aufgabe im Archiv bleibt bearbeitbar');
+    } finally {
+      await D().saveOrdner({ id: sus.id, archiviert: false });
+    }
+    eq([(await ordnerNamens('Mediawo', 'Website')).archiviert, (await ordnerNamens('Mediawo', 'Reels')).archiviert], [false, false]);
+  });
+
+  t('ordner: Firma an und aus', async function () {
+    var master = await quest('Master');
+    var thesis = await ordnerNamens('Master', 'Thesis');
+    var kapitel = await aufgabe('Kapitel 2 lesen');
+    eq(kapitel.ordner_id, thesis.id, 'Seed: Kapitel in Thesis');
+    await D().saveQuest({ id: master.id, firma: true });
+    var m = await ordnerVon('Master');
+    var intern = m.filter(function (o) { return o.art === 'intern'; });
+    var extern = m.filter(function (o) { return o.art === 'extern'; });
+    eq([intern.length, extern.length], [1, 1]);
+    eq([intern[0].name, extern[0].name], ['Intern', 'Extern']);
+    eq(m.find(function (o) { return o.id === thesis.id; }).eltern_id, intern[0].id, 'Thesis unter Intern');
+    var direkt = await D().saveTask({ quest_id: master.id, titel: 'Firmatest direkt', ordner_id: intern[0].id });
+    await D().saveQuest({ id: master.id, firma: true }); // nochmal an: nichts doppelt
+    eq((await ordnerVon('Master')).length, 3);
+
+    await D().saveQuest({ id: master.id, firma: false });
+    m = await ordnerVon('Master');
+    eq(m.map(function (o) { return o.art + ':' + o.name + ':' + o.eltern_id; }), ['projekt:Thesis:null']);
+    var d2 = await aufgabe('Firmatest direkt');
+    ok(d2, 'Aufgabe nicht verloren');
+    eq([d2.ordner_id, d2.kunde_id], [null, null]);
+    eq((await aufgabe('Kapitel 2 lesen')).ordner_id, thesis.id);
+    await D().deleteTask(direkt.id);
+
+    var med = await quest('Mediawo');
+    eq(await fehler(D().saveQuest({ id: med.id, firma: false })), 'Diese Quest hat Kunden-Ordner. Firma kann erst ausgeschaltet werden, wenn es keine mehr gibt.');
+    eq((await quest('Mediawo')).firma, true);
+    eq((await ordnerVon('Mediawo')).filter(function (o) { return o.art === 'intern' || o.art === 'extern'; }).length, 2);
+  });
+
+  t('ordner: neue Firma-Quest und Quest löschen', async function () {
+    var q = await D().saveQuest({ name: 'Ordner-Wegwerf', firma: true });
+    var m = await ordnerVon('Ordner-Wegwerf');
+    eq(m.map(function (o) { return o.art; }).sort(), ['extern', 'intern']);
+    var intern = m.find(function (o) { return o.art === 'intern'; });
+    await D().saveOrdner({ quest_id: q.id, art: 'projekt', name: 'Etwas', eltern_id: intern.id });
+    await D().deleteQuest(q.id);
+    eq((await D().ordner()).filter(function (o) { return o.quest_id === q.id; }).length, 0);
+    var p = await D().saveQuest({ name: 'Ordner-Privat' });
+    var proj = await D().saveOrdner({ quest_id: p.id, art: 'projekt', name: 'Oben' });
+    eq(proj.eltern_id, null, 'Projekt ganz oben in Nicht-Firma-Quest');
+    await D().deleteOrdner(proj.id);
+    await D().deleteQuest(p.id);
+  });
 })();

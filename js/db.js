@@ -13,9 +13,29 @@ window.LW = window.LW || {};
   const MSG_NICHT_SICHTBAR = 'Diese Quest ist nicht sichtbar.';
   const MSG_LAEUFT = 'Es läuft bereits ein Timer.';
   const MSG_ENDE = 'Das Ende muss nach dem Start liegen.';
+  const MSG_NICHT_GEFUNDEN = 'Der Eintrag wurde nicht gefunden oder ist nicht zugänglich.';
+  // Ordner: Meldungen wortgleich wie die Trigger in supabase/03_lw_ordner.sql
+  const MSG_ORDNER_VOLL = 'Der Ordner ist nicht leer. Archiviere ihn stattdessen.';
+  const MSG_ORDNER_LAGE = 'Hier kann dieser Ordner nicht liegen.';
+  const MSG_ORDNER_FEST = 'Intern und Extern können nicht geändert werden.';
+  const MSG_ORDNER_AUTO = 'Intern und Extern werden automatisch angelegt.';
+  const MSG_ORDNER_ART = 'Art und Quest eines Ordners können nicht geändert werden.';
+  const MSG_ORDNER_KUNDE_FEST = 'Der Kunde eines Ordners kann nicht geändert werden.';
+  const MSG_ORDNER_ELTERN_ARCHIV = 'Der übergeordnete Ordner ist archiviert.';
+  const MSG_ORDNER_KUNDE_WAEHLEN = 'Bitte einen Kunden wählen.';
+  const MSG_ORDNER_KUNDE_DOPPELT = 'Für diesen Kunden gibt es in dieser Quest schon einen Ordner.';
+  const MSG_ORDNER_NUR_KUNDE = 'Nur Kunden-Ordner haben einen Kunden.';
+  const MSG_ORDNER_KEIN_KUNDE = 'Diesen Kunden gibt es nicht.';
+  const MSG_ORDNER_NAME = 'Bitte einen Namen eingeben.';
+  const MSG_ORDNER_FREMD = 'Dieser Ordner gehört zu einer anderen Quest.';
+  const MSG_ORDNER_ARCHIV = 'In einen archivierten Ordner kann nichts einsortiert werden.';
+  const MSG_ORDNER_FEHLT = 'Diesen Ordner gibt es nicht.';
+  const MSG_FIRMA_AUS = 'Diese Quest hat Kunden-Ordner. Firma kann erst ausgeschaltet werden, wenn es keine mehr gibt.';
 
   const QUEST_FELDER = ['name', 'farbe', 'geteilt', 'firma', 'sortierung', 'archiviert'];
-  const TASK_FELDER = ['quest_id', 'titel', 'notiz', 'tag', 'zugewiesen_an', 'kunde_id', 'erledigt_am', 'sortierung', 'archiviert'];
+  // kunde_id wird nicht gesendet: die Datenbank leitet ihn aus dem Ordner ab
+  const TASK_FELDER = ['quest_id', 'titel', 'notiz', 'tag', 'zugewiesen_an', 'ordner_id', 'erledigt_am', 'sortierung', 'archiviert'];
+  const ORDNER_FELDER = ['quest_id', 'eltern_id', 'art', 'name', 'kunde_id', 'sortierung', 'archiviert'];
   const ZEIT_FELDER = ['quest_id', 'task_id', 'kunde_id', 'start', 'ende', 'abrechenbar', 'notiz'];
 
   function pick(o, keys) {
@@ -47,9 +67,23 @@ window.LW = window.LW || {};
     if (msg.indexOf('abgerechnet und gesperrt') >= 0) throw new Error(MSG_GESPERRT);
     if (error.code === '23505') throw new Error(MSG_LAEUFT);
     if (error.code === '23514') throw new Error(MSG_ENDE);
-    if (error.code === 'PGRST116') throw new Error('Der Eintrag wurde nicht gefunden oder ist nicht zugänglich.');
+    if (error.code === 'PGRST116') throw new Error(MSG_NICHT_GEFUNDEN);
     throw new Error(msg);
   }
+
+  /* Fehler beim Speichern/Löschen von Ordnern: Trigger-Meldungen gehen durch, Constraint-Codes eigens */
+  function fehlerOrdner(error) {
+    if (!error) return;
+    if (error.code === '23503') throw new Error(MSG_ORDNER_VOLL);            // Fremdschlüssel: Aufgaben/Unterordner
+    if (error.code === '23505') {                                          // eindeutige Indizes
+      throw new Error(/kunde/.test(error.message || '') ? MSG_ORDNER_KUNDE_DOPPELT : MSG_ORDNER_AUTO);
+    }
+    if (error.code === '23514') throw new Error(MSG_ORDNER_LAGE);            // unbekannte Art
+    fehler(error);
+  }
+
+  /* Tabelle lw_ordner fehlt (03_lw_ordner.sql noch nicht ausgeführt) */
+  const tabelleFehlt = error => !!error && (error.code === '42P01' || error.code === 'PGRST205');
 
   /* ---------------- Supabase ---------------- */
   function supabaseDb() {
@@ -106,8 +140,9 @@ window.LW = window.LW || {};
       return r.data;
     }
 
-    return {
+    const api = {
       demo: false,
+      ordnerVerfuegbar: true,
       linkTyp() { const t = linkTyp; linkTyp = null; return t; },
       async session() { const { data } = await sb.auth.getSession(); return data.session; },
       onAuth(cb) { sb.auth.onAuthStateChange((e, s) => { if (e === 'PASSWORD_RECOVERY') linkTyp = 'recovery'; if (!s) meCache = null; cb(s); }); },
@@ -152,10 +187,32 @@ window.LW = window.LW || {};
 
       tasks() { return alle(() => sb.from('lw_tasks').select('*').order('sortierung').order('created_at').order('id')); },
       async saveTask(t) {
-        const q = t.id ? sb.from('lw_tasks').update(pick(t, TASK_FELDER)).eq('id', t.id) : sb.from('lw_tasks').insert(pick(t, TASK_FELDER));
+        const felder = pick(t, TASK_FELDER);
+        if (!api.ordnerVerfuegbar) delete felder.ordner_id; // Spalte gibt es erst nach 03_lw_ordner.sql
+        const q = t.id ? sb.from('lw_tasks').update(felder).eq('id', t.id) : sb.from('lw_tasks').insert(felder);
         const { data, error } = await q.select().single(); fehler(error); return data;
       },
       async deleteTask(id) { const { error } = await sb.from('lw_tasks').delete().eq('id', id); fehler(error, true); },
+
+      /* Alle sichtbaren Ordner, auch archivierte. Fehlt die Tabelle noch: [] und ordnerVerfuegbar = false. */
+      async ordner() {
+        let fehlt = false;
+        const liste = await window.LW.logic.alleSeiten(async (von, bis) => {
+          const { data, error } = await sb.from('lw_ordner').select('*')
+            .order('sortierung').order('created_at').order('id').range(von, bis);
+          if (tabelleFehlt(error)) { fehlt = true; return []; }
+          fehler(error);
+          return data;
+        }, 1000);
+        api.ordnerVerfuegbar = !fehlt;
+        if (fehlt) { console.warn('TM: Tabelle lw_ordner fehlt – bitte supabase/03_lw_ordner.sql ausführen.'); return []; }
+        return liste;
+      },
+      async saveOrdner(o) {
+        const q = o.id ? sb.from('lw_ordner').update(pick(o, ORDNER_FELDER)).eq('id', o.id) : sb.from('lw_ordner').insert(pick(o, ORDNER_FELDER));
+        const { data, error } = await q.select().single(); fehlerOrdner(error); return data;
+      },
+      async deleteOrdner(id) { const { error } = await sb.from('lw_ordner').delete().eq('id', id); fehlerOrdner(error); },
 
       async kunden() {
         const data = await alle(() => sb.from('kunden').select('id, firma, vorname, nachname').eq('status', 'aktiv').order('id'));
@@ -202,6 +259,7 @@ window.LW = window.LW || {};
       },
       async deleteZeit(id) { const { error } = await sb.from('lw_zeiten').delete().eq('id', id); fehler(error); }
     };
+    return api;
   }
 
   /* ---------------- Demo ---------------- */
@@ -224,7 +282,8 @@ window.LW = window.LW || {};
       { id: uid(), firma: 'Atelier dentaire Arnoldy S.à r.l.', vorname: '', nachname: '', status: 'aktiv' },
       { id: uid(), firma: 'Ehemaliger Kunde GmbH', vorname: '', nachname: '', status: 'inaktiv' }
     ];
-    const kDeforis = kunden[0].id, kKreutz = kunden[1].id;
+    const kDeforis = kunden[0].id;
+    const L = window.LW.logic;
 
     const mkQuest = (name, farbe, o) => ({ id: uid(), owner_id: luca.id, name, farbe, geteilt: false, firma: false, sortierung: 0, archiviert: false, created_at: new Date().toISOString(), ...o });
     const quests = [
@@ -234,22 +293,43 @@ window.LW = window.LW || {};
     ];
     const qMed = quests[0].id, qSport = quests[1].id, qMaster = quests[2].id;
 
+    // Ordner wie nach 03_lw_ordner.sql: Mediawo mit Intern/Extern, Master mit einem Projekt
+    let oSort = 0;
+    const ordner = [];
+    const mkOrdner = (quest_id, art, name, eltern, o) => {
+      const n = { id: uid(), quest_id, eltern_id: eltern ? eltern.id : null, art, name, kunde_id: null, sortierung: art === 'projekt' ? ++oSort : 0, archiviert: false, created_at: new Date().toISOString(), ...o };
+      ordner.push(n); return n;
+    };
+    const kundenOrdner = (quest_id, eltern, k) => mkOrdner(quest_id, 'kunde', kundeName(k), eltern, { kunde_id: k.id });
+    const oIntern = mkOrdner(qMed, 'intern', 'Intern');
+    const oExtern = mkOrdner(qMed, 'extern', 'Extern');
+    const oMarketing = mkOrdner(qMed, 'projekt', 'Marketing', oIntern);
+    const oKreutz = kundenOrdner(qMed, oExtern, kunden[1]);
+    const oWebsite = mkOrdner(qMed, 'projekt', 'Website', oKreutz);
+    const oReels = mkOrdner(qMed, 'projekt', 'Reels', oKreutz);
+    const oDeforis = kundenOrdner(qMed, oExtern, kunden[0]);
+    const oAngebot = mkOrdner(qMed, 'projekt', 'Angebot', oDeforis);
+    const oThesis = mkOrdner(qMaster, 'projekt', 'Thesis');
+
     let sort = 0;
     const mkTask = (quest_id, titel, o) => ({
-      id: uid(), quest_id, titel, notiz: null, tag: null, zugewiesen_an: null, kunde_id: null, erledigt_am: null,
+      id: uid(), quest_id, titel, notiz: null, tag: null, zugewiesen_an: null, ordner_id: null, kunde_id: null, erledigt_am: null,
       sortierung: ++sort, archiviert: false, created_by: luca.id, created_at: new Date().toISOString(), ...o
     });
     const tasks = [
-      mkTask(qMed, 'Angebot DeFORIS nachfassen', { tag: tag(-3), zugewiesen_an: luca.id, kunde_id: kDeforis }),
-      mkTask(qMed, 'Reel für Kreutz schneiden', { tag: tag(0), zugewiesen_an: luca.id, kunde_id: kKreutz }),
+      mkTask(qMed, 'Angebot DeFORIS nachfassen', { tag: tag(-3), zugewiesen_an: luca.id, ordner_id: oAngebot.id }),
+      mkTask(qMed, 'Reel für Kreutz schneiden', { tag: tag(0), zugewiesen_an: luca.id, ordner_id: oReels.id }),
       mkTask(qMed, 'Rechnung prüfen', { tag: tag(0) }),
       mkTask(qSport, 'Laufen 5 km', { tag: tag(0), zugewiesen_an: luca.id }),
-      mkTask(qMed, 'Carousel-Entwurf', { tag: tag(1), zugewiesen_an: kai.id, kunde_id: kDeforis, created_by: kai.id }),
-      mkTask(qMaster, 'Kapitel 2 lesen', { tag: tag(2), zugewiesen_an: luca.id }),
+      mkTask(qMed, 'Carousel-Entwurf', { tag: tag(1), zugewiesen_an: kai.id, ordner_id: oAngebot.id, created_by: kai.id }),
+      mkTask(qMaster, 'Kapitel 2 lesen', { tag: tag(2), zugewiesen_an: luca.id, ordner_id: oThesis.id }),
       mkTask(qMaster, 'Literatur sammeln', { zugewiesen_an: luca.id }),
-      mkTask(qMed, 'Website-Texte für Kreutz', { tag: tag(3), zugewiesen_an: luca.id, kunde_id: kKreutz }),
-      mkTask(qSport, 'Krafttraining', { tag: tag(-1), zugewiesen_an: luca.id, erledigt_am: um(-1, 19, 30) })
+      mkTask(qMed, 'Website-Texte für Kreutz', { tag: tag(3), zugewiesen_an: luca.id, ordner_id: oWebsite.id }),
+      mkTask(qSport, 'Krafttraining', { tag: tag(-1), zugewiesen_an: luca.id, erledigt_am: um(-1, 19, 30) }),
+      mkTask(qMed, 'Newsletter-Vorlage', { tag: tag(4), zugewiesen_an: luca.id, ordner_id: oMarketing.id })
     ];
+    // Kunde immer aus dem Ordner (wie Trigger lw_tasks_ordner)
+    tasks.forEach(t => { t.kunde_id = L.ordnerKunde(t.ordner_id, ordner); });
     const tid = titel => tasks.find(t => t.titel === titel);
 
     const rechnungen = [{ id: uid(), nummer: 'R-DEMO-1', typ: 'rechnung', status: 'offen' }];
@@ -279,6 +359,10 @@ window.LW = window.LW || {};
     zeit(luca, tid('Literatur sammeln'), -5, 16, 0, 75);
     zeit(luca, tid('Website-Texte für Kreutz'), -5, 9, 30, 180, { abrechenbar: true, rechnung_id: rechnungen[0].id }); // abgerechnet
     zeit(kai, tid('Rechnung prüfen'), -6, 11, 0, 30);
+    // Newsletter: lag früher bei DeFORIS und wurde dort abgerechnet, dann nach Intern verschoben (gesperrter Eintrag behielt DeFORIS)
+    zeit(luca, tid('Newsletter-Vorlage'), -4, 10, 0, 60);
+    zeit(kai, tid('Newsletter-Vorlage'), -3, 15, 0, 45);
+    zeit(luca, tid('Newsletter-Vorlage'), -6, 9, 0, 30, { kunde_id: kDeforis, abrechenbar: true, rechnung_id: rechnungen[0].id });
 
     let session = null;
     const cbs = [];
@@ -287,11 +371,166 @@ window.LW = window.LW || {};
     const questById = id => quests.find(q => q.id === id);
     const meineLaufende = () => zeiten.find(z => z.user_id === me.id && !z.ende);
 
-    function pruefeZeit(z, alt) {
-      if (alt && alt.rechnung_id) {
-        const r = rechnungen.find(x => x.id === alt.rechnung_id);
-        if (!r || r.status !== 'storniert') throw new Error(MSG_GESPERRT);
+    /* abgerechnet: Rechnung gesetzt und nicht storniert (oder nicht auffindbar) – wie lw_zeiten_sperre */
+    function gesperrt(z) {
+      if (!z.rechnung_id) return false;
+      const r = rechnungen.find(x => x.id === z.rechnung_id);
+      return !r || r.status !== 'storniert';
+    }
+
+    /* ---- Ordner-Regeln, Spiegel von supabase/03_lw_ordner.sql ---- */
+    const ordnerById = id => ordner.find(o => o.id === id);
+    const kundeGibtEs = id => kunden.some(k => k.id === id);
+
+    // Trigger lw_ordner_struktur (n wird angepasst: Name, ggf. archiviert). umbau = "lw.firma_umbau"
+    function pruefeOrdner(n, alt, umbau) {
+      let lage;
+      if (alt) {
+        if (n.art !== alt.art || n.quest_id !== alt.quest_id) throw new Error(MSG_ORDNER_ART);
+        if (alt.art === 'intern' || alt.art === 'extern') {
+          if (n.name !== alt.name || n.eltern_id !== alt.eltern_id || n.archiviert !== alt.archiviert || n.kunde_id !== alt.kunde_id) throw new Error(MSG_ORDNER_FEST);
+          return;
+        }
+        if (n.kunde_id !== alt.kunde_id && !(n.kunde_id == null && alt.kunde_id != null && !kundeGibtEs(alt.kunde_id))) throw new Error(MSG_ORDNER_KUNDE_FEST);
+        if (n.archiviert !== alt.archiviert && !n.archiviert) {
+          const e = ordnerById(n.eltern_id);
+          if (e && e.archiviert) throw new Error(MSG_ORDNER_ELTERN_ARCHIV);
+        }
+        lage = n.eltern_id !== alt.eltern_id;
+      } else {
+        lage = true;
+        if (n.art === 'intern' || n.art === 'extern') {
+          if (!umbau) throw new Error(MSG_ORDNER_AUTO);
+          n.name = n.art === 'intern' ? 'Intern' : 'Extern';
+          n.archiviert = false;
+        }
+        if (n.art === 'kunde') {
+          if (n.kunde_id == null) throw new Error(MSG_ORDNER_KUNDE_WAEHLEN);
+          if (ordner.some(o => o.quest_id === n.quest_id && o.kunde_id === n.kunde_id)) throw new Error(MSG_ORDNER_KUNDE_DOPPELT);
+        } else if (n.kunde_id != null) throw new Error(MSG_ORDNER_NUR_KUNDE);
+        if (!['intern', 'extern', 'kunde', 'projekt'].includes(n.art)) throw new Error(MSG_ORDNER_LAGE); // check-Constraint
       }
+      // Name
+      if (n.art === 'kunde') {
+        const k = kunden.find(x => x.id === n.kunde_id);
+        if (k) n.name = kundeName(k);
+        else if (!alt) throw new Error(MSG_ORDNER_KEIN_KUNDE);
+        else n.name = alt.name;
+      } else if (n.art === 'projekt') {
+        n.name = (n.name == null ? '' : String(n.name)).trim();
+        if (!n.name) throw new Error(MSG_ORDNER_NAME);
+      }
+      // Lage
+      if (lage) {
+        const q = questById(n.quest_id);
+        let e = null;
+        if (n.eltern_id != null) {
+          e = ordnerById(n.eltern_id);
+          if (!e) throw new Error(MSG_ORDNER_LAGE);
+          if (e.quest_id !== n.quest_id) throw new Error(MSG_ORDNER_FREMD);
+          if (e.archiviert) throw new Error(MSG_ORDNER_ARCHIV);
+        }
+        if (!L.ordnerErlaubt(q, e, n.art)) throw new Error(MSG_ORDNER_LAGE);
+      }
+    }
+
+    // Trigger lw_ordner_archiv: jede Ebene gibt den Wert an ihre Kinder weiter
+    function archivVererben(o) {
+      ordner.filter(k => k.eltern_id === o.id && k.archiviert !== o.archiviert).forEach(k => {
+        k.archiviert = o.archiviert;
+        archivVererben(k);
+      });
+    }
+
+    // Trigger lw_tasks_kunde_zeiten: Kunde der Aufgabe geändert -> alle nicht gesperrten Einträge (jeder Person) ziehen mit
+    function zeitFolgtKunde(t, altKunde) {
+      if (t.kunde_id == null && altKunde != null && !kundeGibtEs(altKunde)) return; // Kunde gelöscht: kein Umsortieren
+      const q = questById(t.quest_id);
+      const abrechenbar = !!(q && q.firma && t.kunde_id != null);
+      zeiten.forEach(z => {
+        if (z.task_id === t.id && !gesperrt(z)) { z.kunde_id = t.kunde_id; z.abrechenbar = abrechenbar; }
+      });
+    }
+
+    // Trigger lw_tasks_ordner (n = neue Zeile, alt = vorher oder null): prüft den Ordner, setzt kunde_id
+    function taskOrdner(n, alt) {
+      if (alt && n.quest_id !== alt.quest_id && n.ordner_id === alt.ordner_id) n.ordner_id = null;
+      const neuEinsortiert = !alt || n.ordner_id !== alt.ordner_id;
+      let kunde = null;
+      if (n.ordner_id != null) {
+        const o = ordnerById(n.ordner_id);
+        if (!o) throw new Error(MSG_ORDNER_FEHLT);
+        if (o.quest_id !== n.quest_id) throw new Error(MSG_ORDNER_FREMD);
+        if (neuEinsortiert && o.archiviert) throw new Error(MSG_ORDNER_ARCHIV);
+        kunde = L.ordnerKunde(o.id, ordner);
+        if (kunde != null && !kundeGibtEs(kunde)) kunde = null;
+      }
+      n.kunde_id = kunde;
+    }
+
+    // Trigger lw_ordner_kunde_folgt: Projekt verschoben -> Kunde seiner Aufgaben (und deren Zeit) folgt
+    function kundeFolgtOrdner(o) {
+      if (o.art !== 'projekt') return;
+      const e = ordnerById(o.eltern_id);
+      const kunde = e && e.art === 'kunde' ? e.kunde_id : null;
+      tasks.filter(t => t.ordner_id === o.id && t.kunde_id !== kunde).forEach(t => {
+        const altKunde = t.kunde_id;
+        taskOrdner(t, t); // wie lw_tasks_ordner bei "update of kunde_id": neu ableiten
+        if (t.kunde_id !== altKunde) zeitFolgtKunde(t, altKunde);
+      });
+    }
+
+    // Ordner direkt verschieben (Umbau), mit den Folge-Triggern
+    function ordnerVerschieben(o, elternId) {
+      if (o.eltern_id === elternId) return;
+      o.eltern_id = elternId;
+      kundeFolgtOrdner(o);
+    }
+
+    // lw_ordner_einrichten: Intern/Extern anlegen, Projekte von oben nach Intern,
+    // Aufgaben mit Kunde aber ohne Ordner nach Extern -> (Kunde) -> "Allgemein"
+    function ordnerEinrichten(qId) {
+      const neuerOrdner = (art, name, eltern, o) => {
+        const n = { id: uid(), quest_id: qId, eltern_id: eltern ? eltern.id : null, art, name, kunde_id: null, sortierung: 0, archiviert: false, created_at: new Date().toISOString(), ...o };
+        pruefeOrdner(n, null, true);
+        ordner.push(n);
+        return n;
+      };
+      const intern = ordner.find(o => o.quest_id === qId && o.art === 'intern') || neuerOrdner('intern', 'Intern');
+      const extern = ordner.find(o => o.quest_id === qId && o.art === 'extern') || neuerOrdner('extern', 'Extern');
+      ordner.filter(o => o.quest_id === qId && o.eltern_id == null && o.art === 'projekt').forEach(o => ordnerVerschieben(o, intern.id));
+      const kundenIds = [...new Set(tasks.filter(t => t.quest_id === qId && t.kunde_id != null && t.ordner_id == null).map(t => t.kunde_id))];
+      kundenIds.forEach(k => {
+        const ko = ordner.find(o => o.quest_id === qId && o.art === 'kunde' && o.kunde_id === k) || neuerOrdner('kunde', '', extern, { kunde_id: k });
+        if (ko.archiviert) return;
+        const allg = ordner.filter(o => o.eltern_id === ko.id && o.art === 'projekt' && o.name === 'Allgemein' && !o.archiviert)
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))[0] || neuerOrdner('projekt', 'Allgemein', ko);
+        tasks.filter(t => t.quest_id === qId && t.kunde_id === k && t.ordner_id == null).forEach(t => { t.ordner_id = allg.id; });
+      });
+    }
+
+    // lw_quests_firma, Teil "aus": vorher prüfen (in der DB rollt die Ausnahme das Update zurück)
+    function firmaAusPruefen(qId) {
+      if (ordner.some(o => o.quest_id === qId && o.art === 'kunde')) throw new Error(MSG_FIRMA_AUS);
+    }
+    function firmaAus(qId) {
+      const fest = ordner.filter(o => o.quest_id === qId && (o.art === 'intern' || o.art === 'extern')).map(o => o.id);
+      ordner.filter(o => o.quest_id === qId && fest.includes(o.eltern_id)).forEach(o => ordnerVerschieben(o, null));
+      tasks.filter(t => fest.includes(t.ordner_id)).forEach(t => { t.ordner_id = null; }); // Kunde war dort schon null
+      for (let i = ordner.length - 1; i >= 0; i--) if (fest.includes(ordner[i].id)) ordner.splice(i, 1);
+    }
+    // Quest ändern samt Firma-Umbau (alt wird verändert)
+    function questAendern(alt, patch) {
+      const vorher = alt.firma;
+      const neuFirma = patch.firma === undefined ? vorher : !!patch.firma;
+      if (vorher && !neuFirma) firmaAusPruefen(alt.id);
+      Object.assign(alt, patch);
+      if (!vorher && neuFirma) ordnerEinrichten(alt.id);
+      if (vorher && !neuFirma) firmaAus(alt.id);
+    }
+
+    function pruefeZeit(z, alt) {
+      if (alt && gesperrt(alt)) throw new Error(MSG_GESPERRT);
       if (z.ende && new Date(z.ende) <= new Date(z.start)) throw new Error(MSG_ENDE);
       if (!z.ende && zeiten.some(x => x.user_id === z.user_id && !x.ende && x.id !== z.id)) throw new Error(MSG_LAEUFT);
       const geaendert = !alt || z.quest_id !== alt.quest_id || z.task_id !== alt.task_id;
@@ -330,6 +569,7 @@ window.LW = window.LW || {};
 
     return {
       demo: true,
+      ordnerVerfuegbar: true,
       linkTyp() { return new URLSearchParams(location.search).get('typ'); },
       async passwortSetzen() { return wait(null); },
       async passwortVergessen() { return wait(null); },
@@ -346,16 +586,18 @@ window.LW = window.LW || {};
       async saveQuest(q) {
         if (!q.id) {
           const n = { id: uid(), owner_id: me.id, farbe: '#4F7CAC', geteilt: false, firma: false, sortierung: 0, archiviert: false, created_at: new Date().toISOString(), ...pick(q, QUEST_FELDER) };
-          quests.push(n); return wait(n);
+          quests.push(n);
+          if (n.firma) ordnerEinrichten(n.id);
+          return wait(n);
         }
         const alt = questById(q.id);
         if (!sichtbar(alt)) throw new Error(MSG_NICHT_SICHTBAR);
         if (q.geteilt === false && alt.geteilt) {
           alt.geteilt = false; // wie die Funktion lw_quest_teilen_beenden
-          if (alt.owner_id === me.id) Object.assign(alt, pick(q, QUEST_FELDER));
+          if (alt.owner_id === me.id) questAendern(alt, pick(q, QUEST_FELDER));
           return wait(alt);
         }
-        Object.assign(alt, pick(q, QUEST_FELDER));
+        questAendern(alt, pick(q, QUEST_FELDER));
         return wait(alt);
       },
       async deleteQuest(id) {
@@ -363,6 +605,7 @@ window.LW = window.LW || {};
         if (hatZeit(z => z.quest_id === id)) throw new Error(MSG_ZEIT_GEBUCHT);
         quests.splice(quests.findIndex(x => x.id === id), 1);
         for (let i = tasks.length - 1; i >= 0; i--) if (tasks[i].quest_id === id) tasks.splice(i, 1);
+        for (let i = ordner.length - 1; i >= 0; i--) if (ordner[i].quest_id === id) ordner.splice(i, 1); // cascade
         return wait(null);
       },
 
@@ -376,11 +619,16 @@ window.LW = window.LW || {};
             if (!sichtbar(questById(patch.quest_id))) throw new Error(MSG_NICHT_SICHTBAR);
             if (hatZeit(z => z.task_id === alt.id)) throw new Error('Auf dieser Aufgabe ist Zeit gebucht. Sie kann nicht in eine andere Quest verschoben werden.');
           }
-          Object.assign(alt, patch);
+          const neu = { ...alt, ...patch };
+          taskOrdner(neu, alt);
+          const altKunde = alt.kunde_id;
+          Object.assign(alt, neu);
+          if (alt.kunde_id !== altKunde) zeitFolgtKunde(alt, altKunde);
           return wait(alt);
         }
         if (!sichtbar(questById(t.quest_id))) throw new Error(MSG_NICHT_SICHTBAR);
-        const n = { id: uid(), notiz: null, tag: null, zugewiesen_an: null, kunde_id: null, erledigt_am: null, sortierung: ++sort, archiviert: false, ...pick(t, TASK_FELDER), created_by: me.id, created_at: new Date().toISOString() };
+        const n = { id: uid(), notiz: null, tag: null, zugewiesen_an: null, ordner_id: null, kunde_id: null, erledigt_am: null, sortierung: ++sort, archiviert: false, ...pick(t, TASK_FELDER), created_by: me.id, created_at: new Date().toISOString() };
+        taskOrdner(n, null);
         tasks.push(n); return wait(n);
       },
       async deleteTask(id) {
@@ -388,6 +636,38 @@ window.LW = window.LW || {};
         if (i < 0 || !sichtbar(questById(tasks[i].quest_id))) throw new Error('Der Eintrag wurde nicht gefunden oder ist nicht zugänglich.');
         if (hatZeit(z => z.task_id === id)) throw new Error(MSG_ZEIT_GEBUCHT);
         tasks.splice(i, 1);
+        return wait(null);
+      },
+
+      async ordner() {
+        const nachSort = (a, b) => a.sortierung - b.sortierung || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+        return wait(ordner.filter(o => sichtbar(questById(o.quest_id))).sort(nachSort));
+      },
+      async saveOrdner(o) {
+        if (!o.id) {
+          const n = { id: uid(), eltern_id: null, name: '', kunde_id: null, sortierung: 0, archiviert: false, ...pick(o, ORDNER_FELDER), created_at: new Date().toISOString() };
+          if (!sichtbar(questById(n.quest_id))) throw new Error(MSG_NICHT_SICHTBAR);
+          pruefeOrdner(n, null, false);
+          ordner.push(n);
+          return wait(n);
+        }
+        const alt = ordnerById(o.id);
+        if (!alt || !sichtbar(questById(alt.quest_id))) throw new Error(MSG_NICHT_GEFUNDEN);
+        const neu = { ...alt, ...pick(o, ORDNER_FELDER) };
+        pruefeOrdner(neu, alt, false);
+        const vorher = { ...alt };
+        Object.assign(alt, neu);
+        if (alt.archiviert !== vorher.archiviert) archivVererben(alt);
+        if (alt.eltern_id !== vorher.eltern_id) kundeFolgtOrdner(alt);
+        return wait(alt);
+      },
+      async deleteOrdner(id) {
+        const i = ordner.findIndex(x => x.id === id);
+        if (i < 0 || !sichtbar(questById(ordner[i].quest_id))) return wait(null); // wie delete ohne Treffer
+        const o = ordner[i];
+        if (o.art === 'intern' || o.art === 'extern') throw new Error(MSG_ORDNER_FEST);
+        if (ordner.some(x => x.eltern_id === id) || tasks.some(t => t.ordner_id === id)) throw new Error(MSG_ORDNER_VOLL);
+        ordner.splice(i, 1);
         return wait(null);
       },
 
@@ -425,10 +705,7 @@ window.LW = window.LW || {};
         const i = zeiten.findIndex(x => x.id === id && x.user_id === me.id);
         if (i < 0) return wait(null);
         const z = zeiten[i];
-        if (z.rechnung_id) {
-          const r = rechnungen.find(x => x.id === z.rechnung_id);
-          if (!r || r.status !== 'storniert') throw new Error(MSG_GESPERRT);
-        }
+        if (gesperrt(z)) throw new Error(MSG_GESPERRT);
         zeiten.splice(i, 1);
         return wait(null);
       }
