@@ -1,14 +1,15 @@
-LW – Version 1
+TM – Version 1
 ==============
 
-LW ist dein Planer für Aufgaben, Fokus und Zeiten (Quests, Heute, Woche, Backlog, Rückblick).
-LW nutzt dasselbe Supabase-Projekt wie Mediawo OS. Die Anmeldung ist dieselbe:
+TM ist dein Planer für Aufgaben, Fokus und Zeiten (Quests, Heute, Woche, Backlog, Rückblick).
+TM nutzt dasselbe Supabase-Projekt wie Mediawo OS. Die Anmeldung ist dieselbe:
 Luca und Kai melden sich mit ihren Mediawo-Zugangsdaten an. Es gibt keine neuen Konten.
 
 Inhalt dieses Ordners
 - index.html, css/, js/, img/, vendor/, manifest.webmanifest   die App
-- supabase/01_lw_schema.sql                                     Datenbank-Tabellen für LW (einmalig ausführen)
+- supabase/01_lw_schema.sql                                     Datenbank-Tabellen für TM (einmalig ausführen)
 - supabase/02_lw_pruefen.sql                                    Kontrolle danach (nur lesen)
+- supabase/03_lw_ordner.sql                                     Update für Ordner in Quests (einmalig ausführen)
 - tests/, docs/                                                 Selbsttests und Konzept (harmlos, dürfen mit hochgeladen werden)
 
 Ausprobieren ohne echte Daten
@@ -39,7 +40,7 @@ Einrichten (einmalig)
    Supabase > Authentication > URL Configuration > Redirect URLs > "Add URL":
    https://luca221203.github.io/lw/
    Speichern. Die "Site URL" nicht ändern, die gehört Mediawo OS.
-   (Das braucht LW für "Passwort vergessen?".)
+   (Das braucht TM für "Passwort vergessen?".)
 
 4. Auf GitHub hochladen
    github.com > "+" > "New repository", Name: lw, Sichtbarkeit "Public".
@@ -55,7 +56,7 @@ Einrichten (einmalig)
 
 5. Anmelden
    https://luca221203.github.io/lw/ öffnen und mit den Mediawo-Zugangsdaten anmelden.
-   Beim ersten Mal legt LW das Profil automatisch an (Anzeigename für Zuweisungen).
+   Beim ersten Mal legt TM das Profil automatisch an (Anzeigename für Zuweisungen).
    Kai macht dasselbe mit seinem Mediawo-Login.
 
 6. Auf dem Handy als App
@@ -68,6 +69,26 @@ Bedienung in Kürze
 - F               Fokus starten oder öffnen
 - Strg/Cmd + Enter  Ausgewählte oder laufende Aufgabe als erledigt abhaken
                     (in Heute die ausgewählte, im Fokus die gezeigte)
+
+Update: Ordner (03_lw_ordner.sql)
+  Quests können jetzt Ordner haben (Firma: Intern/Extern, darunter Kunden und Projekte).
+  Reihenfolge einhalten, erst die Datenbank, dann die App:
+  1. Supabase > SQL Editor > New query. Den Inhalt von supabase/03_lw_ordner.sql einfügen > Run.
+     Das Skript darf gefahrlos noch einmal ausgeführt werden.
+  2. Danach eine neue Query mit dem Inhalt von supabase/02_lw_pruefen.sql > Run und die
+     Tabelle prüfen. Erwartet:
+     - RLS: 5 Zeilen (lw_ordner, lw_profile, lw_quests, lw_tasks, lw_zeiten), überall "an"
+     - anon: 5 Zeilen mit "kein Zugriff"
+     - Regeln (Policies): lw_ordner 4, lw_profile 3, lw_quests 4, lw_tasks 4, lw_zeiten 4
+     - Trigger: alle "aktiv" (u. a. lw_ordner_struktur, lw_tasks_ordner, lw_tasks_kunde_zeiten)
+     - Spalte lw_tasks.ordner_id: "vorhanden"
+     Steht irgendwo "AUS", "FEHLT", "ZUGRIFF!", "AUSFÜHRBAR!", "NEIN" oder "inaktiv",
+     nicht weitermachen und Luca Bescheid geben.
+  3. Was mit den bestehenden Daten passiert:
+     - Quests mit "Firma" bekommen die Ordner Intern und Extern.
+     - Aufgaben mit Kunde wandern nach Extern > (Kunde) > "Allgemein".
+     - Zeiteinträge bleiben unverändert.
+  4. Erst danach die neue App-Version auf GitHub hochladen (siehe "Updates").
 
 Updates
   Geänderte Dateien erneut auf GitHub hochladen (gleicher Name ersetzt die alte Datei).
