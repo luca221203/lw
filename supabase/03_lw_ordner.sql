@@ -450,8 +450,8 @@ revoke all on function public.lw_ordner_einrichten(uuid) from public, anon, auth
 -- ---------------------------------------------------------------------
 -- "Firma" an/aus
 -- An (auch beim Anlegen einer Firma-Quest): lw_ordner_einrichten.
--- Aus: abgelehnt, solange es Kunden-Ordner gibt (archivierte zählen
--- mit). Sonst wandern die Projekte aus Intern nach ganz oben, Aufgaben
+-- Aus: abgelehnt, solange es Kunden-Ordner gibt – auch archivierte
+-- zählen, Archivieren reicht also nicht. Sonst wandern die Projekte aus Intern nach ganz oben, Aufgaben
 -- direkt in Intern/Extern liegen danach ohne Ordner, Intern und Extern
 -- werden gelöscht. Keine Aufgabe geht verloren.
 -- security definer, damit der Umbau nicht an den Regeln scheitert.
@@ -476,7 +476,7 @@ begin
     perform public.lw_ordner_einrichten(new.id);
   else
     if exists (select 1 from public.lw_ordner where quest_id = new.id and art = 'kunde') then
-      raise exception 'Diese Quest hat Kunden-Ordner. Archiviere oder verschiebe sie zuerst.';
+      raise exception 'Diese Quest hat Kunden-Ordner. Firma kann erst ausgeschaltet werden, wenn es keine mehr gibt.';
     end if;
     select id into v_intern from public.lw_ordner where quest_id = new.id and art = 'intern';
     select id into v_extern from public.lw_ordner where quest_id = new.id and art = 'extern';
