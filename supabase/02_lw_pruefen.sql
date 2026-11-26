@@ -3,25 +3,35 @@
 -- Im Supabase-Dashboard unter "SQL Editor" einfügen und auf "Run"
 -- klicken. Ergebnis ist eine einzige Tabelle:
 --   pruefung | objekt | ergebnis
--- Erwartet:
---   - RLS:      4 Zeilen (lw_profile, lw_quests, lw_tasks, lw_zeiten) mit "an"
---   - anon:     4 Zeilen mit "kein Zugriff"
---   - Regel:    lw_profile 3, lw_quests 4, lw_tasks 4, lw_zeiten 4
---   - Index:    lw_zeiten_ein_laufender (unique, where ende is null)
---   - Trigger:  lw_quests_besitzer_fest, lw_tasks_ersteller_fest,
---               lw_tasks_quest_fest, lw_zeiten_sperre,
+-- Erwartet (nach 01_lw_schema.sql und 03_lw_ordner.sql):
+--   - RLS:      5 Zeilen (lw_ordner, lw_profile, lw_quests, lw_tasks,
+--               lw_zeiten) mit "an"
+--   - anon:     5 Zeilen mit "kein Zugriff"
+--   - Regel:    lw_ordner 4, lw_profile 3, lw_quests 4, lw_tasks 4,
+--               lw_zeiten 4
+--   - Index:    lw_zeiten_ein_laufender (unique, where ende is null),
+--               lw_ordner_ein_intern, lw_ordner_ein_extern,
+--               lw_ordner_ein_kunde (alle unique)
+--   - Trigger:  lw_ordner_archiv, lw_ordner_kunde_folgt,
+--               lw_ordner_loeschen, lw_ordner_struktur,
+--               lw_quests_besitzer_fest, lw_quests_firma,
+--               lw_tasks_ersteller_fest, lw_tasks_kunde_zeiten,
+--               lw_tasks_ordner, lw_tasks_quest_fest, lw_zeiten_sperre,
 --               lw_zeiten_zuordnung – alle "aktiv"
 --   - Rechte authenticated: lw_profile "INSERT, SELECT, UPDATE",
---               die anderen drei "DELETE, INSERT, SELECT, UPDATE"
+--               die anderen vier "DELETE, INSERT, SELECT, UPDATE"
 --   - Funktion: lw_sichtbar (security definer, stable) und
 --               lw_quest_teilen_beenden (security definer), beide
---               "anon: nein, authenticated: ja"
+--               "anon: nein, authenticated: ja";
+--               lw_ordner_einrichten (nur intern):
+--               "anon: nein, authenticated: nein"
+--   - Spalte:   lw_tasks.ordner_id "vorhanden"
 -- Steht irgendwo "AUS", "FEHLT", "ZUGRIFF!", "AUSFÜHRBAR!", "NEIN"
 -- oder "inaktiv", stimmt etwas nicht.
 -- =====================================================================
 
 with tabellen(name) as (
-  values ('lw_profile'), ('lw_quests'), ('lw_tasks'), ('lw_zeiten')
+  values ('lw_profile'), ('lw_quests'), ('lw_tasks'), ('lw_zeiten'), ('lw_ordner')
 ),
 ergebnis(reihe, pruefung, objekt, ergebnis) as (
   -- Row Level Security eingeschaltet?
@@ -56,11 +66,13 @@ ergebnis(reihe, pruefung, objekt, ergebnis) as (
      and p.tablename in (select name from tabellen)
 
   union all
-  -- Index: höchstens ein laufender Eintrag pro Person
-  select 4, 'Index', i.indexname::text, i.indexdef::text
-    from pg_indexes i
-   where i.schemaname = 'public'
-     and i.indexname = 'lw_zeiten_ein_laufender'
+  -- Indizes: höchstens ein laufender Eintrag pro Person,
+  -- je Quest ein Intern, ein Extern und ein Ordner je Kunde
+  select 4, 'Index', n.name::text, coalesce(i.indexdef, 'FEHLT')::text
+    from (values ('lw_zeiten_ein_laufender'), ('lw_ordner_ein_intern'),
+                 ('lw_ordner_ein_extern'), ('lw_ordner_ein_kunde')) as n(name)
+    left join pg_indexes i
+      on i.schemaname = 'public' and i.indexname = n.name
 
   union all
   -- Trigger auf den LW-Tabellen
@@ -97,11 +109,24 @@ ergebnis(reihe, pruefung, objekt, ergebnis) as (
                                 else ', immutable' end
          || case when has_function_privilege('anon', pr.oid, 'EXECUTE')
                  then ', anon: AUSFÜHRBAR!' else ', anon: nein' end
-         || case when has_function_privilege('authenticated', pr.oid, 'EXECUTE')
+         || case when pr.proname = 'lw_ordner_einrichten' then
+                   -- nur intern (aus Triggern), nicht aus der App aufrufbar
+                   case when has_function_privilege('authenticated', pr.oid, 'EXECUTE')
+                        then ', authenticated: AUSFÜHRBAR!' else ', authenticated: nein' end
+                 when has_function_privilege('authenticated', pr.oid, 'EXECUTE')
                  then ', authenticated: ja' else ', authenticated: NEIN' end
     from pg_proc pr
    where pr.pronamespace = 'public'::regnamespace
-     and pr.proname in ('lw_sichtbar', 'lw_quest_teilen_beenden')
+     and pr.proname in ('lw_sichtbar', 'lw_quest_teilen_beenden', 'lw_ordner_einrichten')
+
+  union all
+  -- Spalte für die Ordner einer Aufgabe
+  select 8, 'Spalte', 'lw_tasks.ordner_id'::text,
+         case when exists (select 1 from information_schema.columns
+                            where table_schema = 'public'
+                              and table_name = 'lw_tasks'
+                              and column_name = 'ordner_id')
+              then 'vorhanden' else 'FEHLT' end
 )
 select pruefung, objekt, ergebnis
   from ergebnis
