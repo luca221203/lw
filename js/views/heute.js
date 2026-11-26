@@ -95,7 +95,7 @@ window.LW = window.LW || {};
 
   function zeichnen() {
     const S = app.S, heute = heuteIso();
-    const bloecke = L.heuteAnsicht(S.quests, S.tasks, S.ich.id, heute);
+    const bloecke = L.heuteAnsicht(S.quests, S.tasks, S.ich.id, heute, S.ordner || []);
     const datum = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
     main.innerHTML = `<div class="seite heute">
       <div class="banner warn" data-zulange hidden><p>Der Timer läuft seit über 12 Stunden. Vergessen zu stoppen?</p>

@@ -29,20 +29,22 @@ window.LW = window.LW || {};
 
   /* opt: gewaehlt (id), heute (iso, für „überfällig“), quest (Quest-Name zeigen), tagKnopf ('text'|'icon'),
           personKnopf (nur geteilte Quests), person (Zuweisung an andere als Etikett), ziehbar,
-          check / fokus / kunde (Vorgabe true: Abhak-Kreis, Fokus-Taste, Kunden-Etikett) */
+          check / fokus / ordner (Vorgabe true: Abhak-Kreis, Fokus-Taste, Ordner-Etikett mit den letzten
+          zwei Ebenen des Pfads, z. B. „Susanne Kreutz › Website“; ganzer Pfad als title) */
   function zeile(t, opt) {
     opt = opt || {};
     const S = app.S;
     const q = S.quests.find(x => x.id === t.quest_id) || {};
     const fertig = !!t.erledigt_am;
-    const kunde = t.kunde_id && (S.kunden.find(k => k.id === t.kunde_id) || {}).name;
+    const pfad = opt.ordner !== false && t.ordner_id ? L.ordnerPfad(t.ordner_id, S.ordner || []) : [];
+    const ordnerName = o => L.ordnerName(o, S.kunden);
     const laeuft = S.laufend && S.laufend.task_id === t.id;
     const titel = esc(t.titel);
     const fremd = q.geteilt && t.zugewiesen_an && t.zugewiesen_an !== S.ich.id;
     const meta = (opt.quest ? `<span class="aufgabe-quest"><span class="dot" aria-hidden="true"></span>${esc(q.name || '')}</span>` : '') +
       (opt.heute && L.istUeberfaellig(t, opt.heute) ? '<span class="badge warn">überfällig</span>' : '') +
       (opt.person && fremd ? `<span class="tag">${esc(personName(t.zugewiesen_an))}</span>` : '') +
-      (kunde && opt.kunde !== false ? `<span class="tag">${esc(kunde)}</span>` : '');
+      (pfad.length ? `<span class="tag ordner-tag" title="${esc([q.name || ''].concat(pfad.map(ordnerName)).join(' › '))}">${esc(pfad.slice(-2).map(ordnerName).join(' › '))}</span>` : '');
     let knoepfe = '';
     if (!fertig && opt.tagKnopf === 'text') {
       knoepfe += `<button class="btn small ghost zeile-knopf" type="button" data-aktion="tag" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(t.tag ? relativ(t.tag) : 'Ohne Tag')} – Tag setzen: ${titel}">${icon('i-woche')}<span>${esc(t.tag ? relativ(t.tag) : 'Ohne Tag')}</span></button>`;

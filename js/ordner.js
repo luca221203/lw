@@ -88,7 +88,7 @@ window.LW = window.LW || {};
         : '<span class="b-auf" aria-hidden="true"></span>';
       const std = opt.sek ? `<span class="std">${L.formatDauer(opt.sek)}</span>` : '';
       const kopf = opt.href
-        ? `<a class="b-name" href="${opt.href}" title="${esc(opt.titel || opt.name)}"${k === aktuell ? ' aria-current="page"' : ''}>${opt.dot || ''}<span class="name">${titel}</span>${std}</a>`
+        ? `<a class="b-name" href="${esc(opt.href)}" title="${esc(opt.titel || opt.name)}"${k === aktuell ? ' aria-current="page"' : ''}>${opt.dot || ''}<span class="name">${titel}</span>${std}</a>`
         : `<button class="b-name" type="button" aria-expanded="${auf}" aria-controls="bk-${esc(k)}"><span class="name">${titel}</span></button>`;
       const mehr = opt.menue
         ? `<button class="b-mehr tip-links" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Aktionen für ${titel}" data-tip="Aktionen öffnen">${icon('i-mehr')}</button>`
@@ -99,7 +99,7 @@ window.LW = window.LW || {};
     };
     const ast = (knoten, tiefe) => knoten.map(n => zeile(n.ordner.id, tiefe, {
       name: name(n.ordner), titel: n.ordner.archiviert ? L.ordnerPfad(n.ordner.id, s.ordner).map(name).join(' › ') : null,
-      href: '#ordner/' + encodeURIComponent(n.ordner.id), sek: n.ordner.archiviert ? 0 : sekO[n.ordner.id],
+      href: app.hashVon('ordner', n.ordner.id), sek: n.ordner.archiviert ? 0 : sekO[n.ordner.id],
       menue: true, kinder: ast(n.kinder, tiefe + 1)
     })).join('');
 
@@ -114,7 +114,7 @@ window.LW = window.LW || {};
         if (arch.length) kinder += zeile(ARCHIV + q.id, 1, { name: 'Archiviert', klasse: 'b-archiv', kinder: ast(arch, 2) });
       }
       return zeile(q.id, 0, {
-        name: q.name, href: '#quest/' + encodeURIComponent(q.id), sek: sekQ[q.id], menue: true, kinder,
+        name: q.name, href: app.hashVon('quest', q.id), sek: sekQ[q.id], menue: true, kinder,
         dot: `<span class="dot" style="--q:${farbe(q.farbe)}" aria-hidden="true"></span>`
       });
     }).join('');

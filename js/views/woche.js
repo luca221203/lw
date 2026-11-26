@@ -37,7 +37,7 @@ window.LW = window.LW || {};
     S.quests.forEach(q => { if (!q.archiviert) quests[q.id] = q; });
     const sichtbar = t => {
       const q = quests[t.quest_id];
-      return q && !t.archiviert && !t.erledigt_am && (alle || !q.geteilt || !t.zugewiesen_an || t.zugewiesen_an === S.ich.id);
+      return q && !t.archiviert && !t.erledigt_am && L.aufgabeSichtbar(t, S.ordner || []) && (alle || !q.geteilt || !t.zugewiesen_an || t.zugewiesen_an === S.ich.id);
     };
     const sortieren = (a, b) => (quests[a.quest_id].sortierung || 0) - (quests[b.quest_id].sortierung || 0) || (a.sortierung || 0) - (b.sortierung || 0);
     const liste = S.tasks.filter(sichtbar);
@@ -48,7 +48,7 @@ window.LW = window.LW || {};
   }
 
   function zeilen(tasks, leer) {
-    const opt = { quest: true, tagKnopf: 'icon', person: true, check: false, fokus: false, kunde: false, ziehbar: ziehen() };
+    const opt = { quest: true, tagKnopf: 'icon', person: true, check: false, fokus: false, ziehbar: ziehen() };
     return tasks.length
       ? `<ul class="aufgaben">${tasks.map(t => A.zeile(t, opt)).join('')}</ul>`
       : `<p class="spalte-leer">${leer}</p>`;

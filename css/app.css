@@ -512,19 +512,19 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
 .chip{display:inline-flex;align-items:center;gap:var(--s2);height:var(--h-sm);padding:0 var(--s3);border:1px solid var(--line-strong);border-radius:var(--r-pill);background:var(--raised);color:var(--muted);font-size:var(--fs-sm);font-weight:500;white-space:nowrap;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 @media (hover:hover){.chip:hover{border-color:var(--faint);color:var(--ink)}.chip[aria-pressed="true"]:hover{border-color:var(--ink);color:var(--bg)}}
-.backlog .aufgabe{flex-wrap:wrap}
+.backlog .aufgabe,.ordner-seite .aufgabe{flex-wrap:wrap}
 /* Schnell-Tasten bündig untereinander: Tag | Person | Fokus */
-.backlog .aufgabe-aktionen{display:grid;grid-template-columns:120px 112px auto;justify-items:start}
-.backlog .zeile-knopf{max-width:100%}
-.backlog .zeile-knopf span{overflow:hidden;text-overflow:ellipsis}
+.backlog .aufgabe-aktionen,.ordner-seite .aufgabe-aktionen{display:grid;grid-template-columns:120px 112px auto;justify-items:start}
+.backlog .zeile-knopf,.ordner-seite .zeile-knopf{max-width:100%}
+.backlog .zeile-knopf span,.ordner-seite .zeile-knopf span{overflow:hidden;text-overflow:ellipsis}
 @media (max-width:767.98px){
   .filter{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s2)}
   .chips{flex-wrap:nowrap;overflow-x:auto;margin:0 calc(-1 * var(--s4));padding:0 var(--s4);scrollbar-width:none}
   .chips + .chips{padding-left:var(--s4);border-left:0}
   .chips::-webkit-scrollbar{display:none}
-  .backlog .aufgabe-aktionen{display:flex;width:100%;min-width:0;padding-left:var(--h-sm);margin-top:calc(-1 * var(--s1))}
-  .backlog .zeile-knopf{min-width:0;flex-shrink:1}
-  .backlog .fokus-btn{margin-left:auto}
+  .backlog .aufgabe-aktionen,.ordner-seite .aufgabe-aktionen{display:flex;width:100%;min-width:0;padding-left:var(--h-sm);margin-top:calc(-1 * var(--s1))}
+  .backlog .zeile-knopf,.ordner-seite .zeile-knopf{min-width:0;flex-shrink:1}
+  .backlog .fokus-btn,.ordner-seite .fokus-btn{margin-left:auto}
 }
 
 /* Archiviert (zugeklappt) */
@@ -612,3 +612,33 @@ dialog.befehle{align-self:flex-start;margin-top:min(14vh,120px);width:min(560px,
 .bf-liste li .dot{margin:0 5px}
 /* Tooltips gibt es nur mit Maus oder Tastatur; auf Touch-Geräten würden sie den Seitenrand überragen */
 @media (hover:none){[data-tip]::after{display:none}}
+
+/* Ordner-Ansicht (#ordner/<id>, #quest/<id>) */
+.pfad ol{display:flex;flex-wrap:wrap;align-items:center;list-style:none;margin:0 0 var(--s2);padding:0;font-size:var(--fs-sm);color:var(--muted)}
+.pfad li{display:flex;align-items:center;min-width:0}
+.pfad li + li::before{content:"›";padding:0 var(--s2);color:var(--faint)}
+.pfad a{display:inline-flex;align-items:center;gap:var(--s2);min-height:var(--h-sm);max-width:240px;color:var(--muted);text-decoration:none;border-radius:var(--r-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (hover:hover){.pfad a:hover{color:var(--ink);text-decoration:underline}}
+.kopf h1{display:flex;align-items:center;gap:var(--s3);overflow-wrap:anywhere}
+.kopf-dot{width:12px;height:12px}
+.ordner-zeit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s3);margin:0 0 var(--s5)}
+.ordner-zeit > div{padding:var(--s3) var(--s4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);min-width:0}
+.ordner-zeit dt{font-size:var(--fs-xs);color:var(--muted)}
+.ordner-zeit dd{margin:var(--s1) 0 0;font-size:var(--fs-lg);font-weight:500;color:var(--ink)}
+.banner.info{border-color:var(--line);background:var(--sunken);color:var(--muted)}
+.og-erledigt .aufgaben{padding:var(--s2);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
+@media (max-width:767.98px){.ordner-zeit{gap:var(--s2)}.ordner-zeit > div{padding:var(--s2) var(--s3)}.ordner-zeit dd{font-size:var(--fs-base)}}
+
+/* Ordner-Etikett an Aufgaben-Zeilen (letzte zwei Ebenen) */
+.ordner-tag{max-width:220px}
+
+/* Aufgaben-Dialog: abgeleiteter Kunde unter der Ordner-Auswahl */
+.ordner-hinweis{margin-top:0;font-size:var(--fs-xs)}
+
+/* Backlog: Ordner-Filter */
+.filter-ordner{display:inline-flex;align-items:center;gap:var(--s2);font-size:var(--fs-sm);font-weight:500;color:var(--muted)}
+.filter-ordner select{width:auto;max-width:260px;height:var(--h-sm);font-size:var(--fs-sm)}
+@media (max-width:767.98px){.filter-ordner{display:flex}.filter-ordner select{flex:1;max-width:none;height:var(--h)}}
+.feld-reihe > [data-nur="ordner"]{grid-column:1/-1} /* Pfade sind lang: Ordner-Auswahl über die ganze Breite */
+.og .qb-meta{flex:none;white-space:nowrap}
+.og .qb-aktionen{margin-left:auto}

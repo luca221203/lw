@@ -1,5 +1,5 @@
 /* Backlog: alle offenen Aufgaben, nach Quest gruppiert. Filter: Quest (auch über #backlog/<questId>),
-   Person (Alle / Ich / Niemand zugewiesen), „Ohne Tag“. Pro Zeile: Tag setzen, Zuweisen, Fokus.
+   Person (Alle / Ich / Niemand zugewiesen), „Ohne Tag“, Ordner (samt Unterordnern, oder „Ohne Ordner“). Pro Zeile: Tag setzen, Zuweisen, Fokus.
    Unten (zugeklappt) „Archiviert“: archivierte Quests und Aufgaben wiederherstellen. */
 window.LW = window.LW || {};
 (function () {
@@ -13,7 +13,7 @@ window.LW = window.LW || {};
   const PERSONEN = [['alle', 'Alle'], ['ich', 'Ich'], ['niemand', 'Niemand zugewiesen']];
 
   let main = null, archivOffen = false;
-  const f = { questId: null, person: 'alle', ohneTag: false };
+  const f = { questId: null, person: 'alle', ohneTag: false, ordnerId: null }; // ordnerId: Ordner-Id, 'ohne' oder null
   const taskById = id => app.S.tasks.find(t => t.id === id);
   const aktiveQuests = () => app.S.quests.filter(q => !q.archiviert).sort((a, b) => (a.sortierung || 0) - (b.sortierung || 0));
 
@@ -61,12 +61,33 @@ window.LW = window.LW || {};
     </details>`;
   }
 
+  /* Ordner zur Auswahl: nicht archiviert, in aktiven Quests (bei Quest-Filter nur diese), in Baum-Reihenfolge. */
+  function ordnerWahl(quests) {
+    const S = app.S;
+    if (DB.ordnerVerfuegbar === false) return [];
+    return quests.filter(q => !f.questId || q.id === f.questId).map(q => {
+      const liste = [];
+      (function lauf(knoten) { knoten.forEach(n => { liste.push(n.ordner); lauf(n.kinder); }); })(L.ordnerBaum(q.id, S.ordner || [], S.kunden));
+      return { q, liste };
+    }).filter(g => g.liste.length);
+  }
+  function ordnerFilter(wahl) {
+    if (!wahl.length) return '';
+    const S = app.S, opt = (wert, text) => `<option value="${esc(wert)}"${(f.ordnerId || '') === wert ? ' selected' : ''}>${esc(text)}</option>`;
+    const pfad = o => L.ordnerPfad(o.id, S.ordner).map(x => L.ordnerName(x, S.kunden)).join(' › ');
+    return `<label class="filter-ordner">Ordner<select data-aktion="ordner">${opt('', 'Alle Ordner')}${opt('ohne', 'Ohne Ordner')}
+      ${wahl.map(g => `<optgroup label="${esc(g.q.name)}">${g.liste.map(o => opt(o.id, pfad(o))).join('')}</optgroup>`).join('')}</select></label>`;
+  }
+
   function zeichnen() {
-    const S = app.S, heute = heuteIso(), quests = aktiveQuests();
+    const S = app.S, heute = heuteIso(), quests = aktiveQuests(), ordner = S.ordner || [];
     if (f.questId && !quests.some(q => q.id === f.questId)) f.questId = null;
-    const alleOffen = L.backlog(S.tasks, S.quests, {}, S.ich.id).length;
-    const liste = L.backlog(S.tasks, S.quests, { questId: f.questId, person: f.person === 'alle' ? null : f.person, ohneTag: f.ohneTag }, S.ich.id);
-    const gefiltert = !!(f.questId || f.person !== 'alle' || f.ohneTag);
+    const wahl = ordnerWahl(quests);
+    if (f.ordnerId && f.ordnerId !== 'ohne' && !wahl.some(g => g.liste.some(o => o.id === f.ordnerId))) f.ordnerId = null; // weg, archiviert oder andere Quest
+    const alleOffen = L.backlog(S.tasks, S.quests, {}, S.ich.id, ordner).length;
+    let liste = L.backlog(S.tasks, S.quests, { questId: f.questId, person: f.person === 'alle' ? null : f.person, ohneTag: f.ohneTag, ordnerId: f.ordnerId === 'ohne' ? null : f.ordnerId }, S.ich.id, ordner);
+    if (f.ordnerId === 'ohne') liste = liste.filter(t => t.ordner_id == null);
+    const gefiltert = !!(f.questId || f.person !== 'alle' || f.ohneTag || f.ordnerId);
     const gruppen = quests.map(q => ({ q, tasks: liste.filter(t => t.quest_id === q.id) })).filter(g => g.tasks.length);
     const det = d => { const el = d && $('details.archiv', d); if (el) archivOffen = el.open; };
     det(main);
@@ -93,6 +114,7 @@ window.LW = window.LW || {};
         <div class="chips" role="group" aria-label="Quest">${chip('quest', '', 'Alle Quests', !f.questId)}${quests.map(q => chip('quest', q.id, q.name, f.questId === q.id, `<span class="dot" style="--q:${farbe(q.farbe)}" aria-hidden="true"></span>`)).join('')}</div>
         <div class="chips" role="group" aria-label="Person">${PERSONEN.map(p => chip('person', p[0], p[1], f.person === p[0])).join('')}</div>
         <div class="chips" role="group" aria-label="Tag">${chip('ohne-tag', '1', 'Ohne Tag', f.ohneTag)}</div>
+        ${ordnerFilter(wahl)}
       </div>` : ''}
       ${inhalt}
       ${archiv()}
@@ -137,13 +159,13 @@ window.LW = window.LW || {};
       case 'bearbeiten': if (t) LW.dialoge.aufgabe(t); break;
       case 'tag': if (t) A.tagMenue(el, t, [0, 1, 2, 3, 4, 5, 6].map(n => A.plusTage(heuteIso(), n))); break;
       case 'zuweisen': if (t) A.personMenue(el, t); break;
-      case 'neu': LW.dialoge.aufgabe(null, { quest_id: el.dataset.wert || f.questId || undefined }); break;
+      case 'neu': LW.dialoge.aufgabe(null, { quest_id: el.dataset.wert || f.questId || undefined, ordner_id: f.ordnerId && f.ordnerId !== 'ohne' ? f.ordnerId : undefined }); break;
       case 'neue-quest': LW.dialoge.quest(); break;
       case 'quest': questSetzen(el.dataset.wert); neu(); break;
       case 'person': f.person = el.dataset.wert; filterMerken(); neu(); break;
       case 'ohne-tag': f.ohneTag = !f.ohneTag; filterMerken(); neu(); break;
       case 'zuruecksetzen':
-        questSetzen(null); f.person = 'alle'; f.ohneTag = false; filterMerken(); neu();
+        questSetzen(null); f.person = 'alle'; f.ohneTag = false; f.ordnerId = null; filterMerken(); neu();
         { const c = $('.chip[data-aktion="quest"]', main); if (c) c.focus(); }
         break;
       case 'wiederherstellen': { const z = el.closest('[data-id]'); if (z) wiederherstellen(el.dataset.art, z.dataset.id); break; }
@@ -158,6 +180,11 @@ window.LW = window.LW || {};
       f.questId = param || null;
       zeichnen();
       main.onclick = klick;
+      main.onchange = e => {
+        if (e.target.dataset.aktion !== 'ordner') return;
+        f.ordnerId = e.target.value || null;
+        A.neuZeichnenMitFokus(main, zeichnen);
+      };
     },
     aktualisieren() { if (main) A.neuZeichnenMitFokus(main, zeichnen); },
     destroy() { A.menueZu(); if (main) { const d = $('details.archiv', main); if (d) archivOffen = d.open; } main = null; }

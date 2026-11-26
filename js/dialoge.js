@@ -1,6 +1,6 @@
 /* Dialoge für Quests und Aufgaben: anlegen, bearbeiten, archivieren, löschen.
    LW.dialoge.quest(quest?, opt?)  opt: {hinweis, danach(quest)}
-   LW.dialoge.aufgabe(task?, vorgaben?: {quest_id, tag})
+   LW.dialoge.aufgabe(task?, vorgaben?: {quest_id, ordner_id, tag})
    Nach dem Speichern wird der Zustand (LW.app.S) angepasst, dann Seitenleiste und Ansicht neu gezeichnet. */
 window.LW = window.LW || {};
 (function () {
@@ -33,7 +33,7 @@ window.LW = window.LW || {};
   /* Entwurf des Aufgaben-Dialogs: übersteht versehentliches Schließen (Esc, Klick daneben) und Neuladen.
      Ein Platz; Schlüssel = Aufgaben-id oder 'neu'. Weg nach Speichern, Abbrechen oder Löschen. */
   const ENTWURF = 'lw-entwurf-aufgabe';
-  const FELDER = ['titel', 'quest', 'tag', 'zugewiesen', 'kunde', 'notiz'];
+  const FELDER = ['titel', 'quest', 'tag', 'zugewiesen', 'ordner', 'notiz'];
   function entwurf(schluessel, wert) {
     try {
       if (wert === undefined) { const e = JSON.parse(localStorage.getItem(ENTWURF) || 'null'); return e && e.k === schluessel ? e : null; }
@@ -188,12 +188,25 @@ window.LW = window.LW || {};
       });
     }
     const gibt = id => quests.some(q => q.id === id);
-    const questId = t ? t.quest_id : [vorgaben.quest_id, letzteQuest()].find(gibt) || quests[0].id;
+    const ordnerAlle = s.ordner || [], mitOrdner = DB.ordnerVerfuegbar !== false;
+    const ordnerVon = id => ordnerAlle.find(o => o.id === id);
+    const vorOrdner = !t && vorgaben.ordner_id ? ordnerVon(vorgaben.ordner_id) : null;
+    const questId = t ? t.quest_id : [vorgaben.quest_id, vorOrdner && vorOrdner.quest_id, letzteQuest()].find(gibt) || quests[0].id;
     const tag = t ? (t.tag || '') : (vorgaben.tag || '');
     const zugew = t ? (t.zugewiesen_an || '') : s.ich.id;
-    const kundeId = t ? (t.kunde_id || '') : '';
-    const kunden = s.kunden.slice();
-    if (kundeId && !kunden.some(k => k.id === kundeId)) kunden.push({ id: kundeId, name: 'Kunde (nicht mehr aktiv)' });
+    // Ordner-Vorgabe nur, wenn er zur gewählten Quest gehört
+    const ordnerVorgabe = t ? (t.ordner_id || '') : (vorOrdner && vorOrdner.quest_id === questId ? vorOrdner.id : '');
+    const ordnerText = id => L.ordnerPfad(id, ordnerAlle).map(o => L.ordnerName(o, s.kunden)).join(' › ');
+    /* Optionen: „Ohne Ordner“ + alle nicht archivierten Ordner der Quest in Baum-Reihenfolge, beschriftet mit dem Pfad.
+       Liegt die Aufgabe schon in einem archivierten Ordner, bleibt er wählbar (sonst ginge er beim Speichern verloren). */
+    function ordnerOptionen(qid, aktiv) {
+      const liste = [];
+      (function lauf(knoten) { knoten.forEach(n => { liste.push(n.ordner); lauf(n.kinder); }); })(L.ordnerBaum(qid, ordnerAlle, s.kunden));
+      let html = opt('', 'Ohne Ordner', aktiv) + liste.map(o => opt(o.id, ordnerText(o.id), aktiv)).join('');
+      const bisher = t && t.ordner_id && ordnerVon(t.ordner_id);
+      if (bisher && bisher.quest_id === qid && !liste.includes(bisher)) html += opt(bisher.id, ordnerText(bisher.id) + ' (archiviert)', aktiv);
+      return { html, anzahl: liste.length + (bisher && bisher.quest_id === qid && !liste.includes(bisher) ? 1 : 0) };
+    }
     const personen = s.profile.slice().sort((a, b) => (a.id === s.ich.id ? -1 : b.id === s.ich.id ? 1 : 0));
     const opt = (wert, text, aktiv) => `<option value="${esc(wert)}"${wert === aktiv ? ' selected' : ''}>${esc(text)}</option>`;
 
@@ -210,9 +223,12 @@ window.LW = window.LW || {};
           <label class="f">Tag (optional)<input type="date" name="tag" value="${esc(tag)}"></label>
         </div>
         <div class="feld-reihe" data-zusatz>
+          <div class="f-gruppe" data-nur="ordner">
+            <label class="f">Ordner (optional)<select name="ordner" aria-describedby="ordnerHinweis">${ordnerOptionen(questId, ordnerVorgabe).html}</select></label>
+            <p class="sub ordner-hinweis" id="ordnerHinweis"></p>
+          </div>
           <label class="f" data-nur="geteilt">Zugewiesen an<select name="zugewiesen">
             ${personen.map(p => opt(p.id, p.id === s.ich.id ? 'Ich' : p.name, zugew)).join('')}${opt('', 'Niemand', zugew)}</select></label>
-          <label class="f" data-nur="firma">Kunde<select name="kunde">${opt('', 'Ohne Kunde', kundeId)}${kunden.map(k => opt(k.id, k.name, kundeId)).join('')}</select></label>
         </div>
         <label class="f">Notiz (optional)<textarea name="notiz" rows="3">${esc(t ? t.notiz || '' : '')}</textarea></label>
         <p class="meldung" role="alert" hidden></p>
@@ -226,28 +242,51 @@ window.LW = window.LW || {};
     const f = d.querySelector('form');
     const titelOk = pflicht(f.titel, f.querySelector('.feld-fehler'), 'Bitte einen Titel eintragen.');
     const questVon = () => quests.find(q => q.id === f.quest.value);
+    let ordnerAnzahl = ordnerOptionen(questId, ordnerVorgabe).anzahl;
+    /* Abgeleiteter Kunde (nur Firma-Quests): „Kunde: Susanne Kreutz · abrechenbar“ bzw. „Kein Kunde · intern“ */
+    const hinweis = () => {
+      const q = questVon(), el = f.querySelector('#ordnerHinweis');
+      const kid = f.ordner.value ? L.ordnerKunde(f.ordner.value, ordnerAlle) : null;
+      const ko = kid != null && L.ordnerPfad(f.ordner.value, ordnerAlle).filter(o => o.art === 'kunde').pop();
+      el.textContent = !q.firma ? '' : kid != null ? 'Kunde: ' + L.ordnerName(ko, s.kunden) + ' · abrechenbar' : 'Kein Kunde · intern';
+      el.hidden = !el.textContent;
+    };
     const zusatz = () => {
       const q = questVon();
-      const g = f.querySelector('[data-nur=geteilt]'), k = f.querySelector('[data-nur=firma]');
-      g.hidden = !q.geteilt; k.hidden = !q.firma;
-      f.querySelector('[data-zusatz]').hidden = g.hidden && k.hidden;
+      const g = f.querySelector('[data-nur=geteilt]'), o = f.querySelector('[data-nur=ordner]');
+      g.hidden = !q.geteilt; o.hidden = !mitOrdner || !ordnerAnzahl;
+      f.querySelector('[data-zusatz]').hidden = g.hidden && o.hidden;
+      hinweis();
+    };
+    /* Quest gewechselt: Ordner-Auswahl neu, zurück auf „Ohne Ordner“ */
+    const ordnerNeu = wert => {
+      const r = ordnerOptionen(f.quest.value, wert || '');
+      f.ordner.innerHTML = r.html;
+      ordnerAnzahl = r.anzahl;
     };
     const schluessel = s.ich.id + ':' + (t ? t.id : 'neu');
     const alt = entwurf(schluessel);
     if (alt) {
-      FELDER.forEach(n => {
+      const setzen = n => {
         if (alt[n] == null) return;
         const el = f[n];
         if (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === alt[n])) return; // Option gibt es nicht mehr
         el.value = alt[n];
-      });
-      if (neu && vorgaben.quest_id && gibt(vorgaben.quest_id)) f.quest.value = vorgaben.quest_id; // ausdrückliche Vorgaben gewinnen
+      };
+      FELDER.filter(n => n !== 'ordner').forEach(setzen);
+      // ausdrückliche Vorgaben gewinnen
+      const vorQuest = neu && (vorgaben.quest_id && gibt(vorgaben.quest_id) ? vorgaben.quest_id : vorOrdner && gibt(vorOrdner.quest_id) ? vorOrdner.quest_id : null);
+      if (vorQuest) f.quest.value = vorQuest;
       if (neu && vorgaben.tag) f.tag.value = vorgaben.tag;
+      ordnerNeu(f.quest.value === questId ? ordnerVorgabe : '');
+      if (neu && vorOrdner && vorOrdner.quest_id === f.quest.value) f.ordner.value = vorOrdner.id;
+      else setzen('ordner');
       f.querySelector('[data-entwurf]').hidden = false;
       f.querySelector('[data-verwerfen]').onclick = () => { entwurf(schluessel, null); aufgabe(t, vorgaben); };
     }
     zusatz();
-    f.quest.onchange = zusatz;
+    f.quest.onchange = () => { ordnerNeu(''); zusatz(); };
+    f.ordner.onchange = hinweis;
     const merken = () => { const e = { k: schluessel }; FELDER.forEach(n => { e[n] = f[n].value; }); entwurf(schluessel, e); };
     f.addEventListener('input', merken);
     f.addEventListener('change', merken);
@@ -259,12 +298,16 @@ window.LW = window.LW || {};
       const q = questVon();
       const daten = {
         quest_id: q.id, titel: f.titel.value.trim(), tag: f.tag.value || null, notiz: f.notiz.value.trim() || null,
-        zugewiesen_an: q.geteilt ? (f.zugewiesen.value || null) : s.ich.id,
-        kunde_id: q.firma ? (f.kunde.value || null) : null
+        zugewiesen_an: q.geteilt ? (f.zugewiesen.value || null) : s.ich.id
       };
+      // Kunde ergibt sich in der Datenbank aus dem Ordner; ohne Ordner-Tabelle bleibt die Spalte weg
+      if (mitOrdner) daten.ordner_id = f.ordner.value || null;
       senden(f, async () => {
         const r = await DB.saveTask(neu ? daten : { id: t.id, ...daten });
+        const kundeAlt = t ? t.kunde_id || null : null;
         ersetzen(s.tasks, r);
+        // Kunde gewechselt: Datenbank hat die Zeit (auch den laufenden Eintrag) umgebucht – heutige Zeiten neu holen
+        if (!neu && r && (r.kunde_id || null) !== kundeAlt) app.abgleichen();
         entwurf(schluessel, null);
         letzteQuest(q.id);
         closeDlg();
