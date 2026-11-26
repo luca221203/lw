@@ -57,10 +57,11 @@ window.LW = window.LW || {};
     return offen(task) && task.tag != null && task.tag < heute;
   }
 
-  function heuteAnsicht(quests, tasks, meId, heute) {
+  function heuteAnsicht(quests, tasks, meId, heute, ordner) {
+    ordner = ordner || [];
     return aktiveQuests(quests).slice().sort(nachSort).map(function (q) {
       var liste = tasks.filter(function (t) {
-        if (t.quest_id !== q.id || t.archiviert) return false;
+        if (t.quest_id !== q.id || t.archiviert || !aufgabeSichtbar(t, ordner)) return false;
         if (q.geteilt && t.zugewiesen_an != null && t.zugewiesen_an !== meId) return false;
         if (offen(t)) return t.tag != null && t.tag <= heute;
         return erledigtTag(t) === heute;
@@ -78,13 +79,16 @@ window.LW = window.LW || {};
     });
   }
 
-  function backlog(tasks, quests, filter, meId) {
+  function backlog(tasks, quests, filter, meId, ordner) {
     filter = filter || {};
+    ordner = ordner || [];
+    var imOrdner = filter.ordnerId ? nachkommen(filter.ordnerId, ordner) : null;
     var map = {};
     aktiveQuests(quests).forEach(function (q) { map[q.id] = q; });
     var r = tasks.filter(function (t) {
       var q = map[t.quest_id];
-      if (!q || t.archiviert || !offen(t)) return false;
+      if (!q || t.archiviert || !offen(t) || !aufgabeSichtbar(t, ordner)) return false;
+      if (imOrdner && imOrdner.indexOf(t.ordner_id) < 0) return false;
       if (filter.questId && t.quest_id !== filter.questId) return false;
       if (filter.ohneTag && t.tag != null) return false;
       if (filter.person === 'ich') {
@@ -117,12 +121,148 @@ window.LW = window.LW || {};
 
   function nachSekAbsteigend(a, b) { return b.sek - a.sek; }
 
-  function rueckblick(zeiten, quests, tasks, kunden, vonIso, bisIso, jetzt) {
+  /* ---- Ordner ---- */
+  var ART_RANG = { intern: 0, extern: 1, kunde: 2, projekt: 3 };
+
+  function ordnerMap(ordner) {
+    var m = {};
+    (ordner || []).forEach(function (o) { m[o.id] = o; });
+    return m;
+  }
+
+  /* Anzeigename: bei Kunden-Ordnern der aktuelle Kundenname, sonst der gespeicherte Name. */
+  function ordnerName(o, kunden) {
+    if (o.art !== 'kunde') return o.name;
+    if (o.kunde_id == null) return o.name + ' (gelöscht)';
+    var k = (kunden || []).filter(function (x) { return x.id === o.kunde_id; })[0];
+    return k ? k.name : o.name;
+  }
+
+  function vergleichOrdner(kunden) {
+    return function (a, b) {
+      var ra = ART_RANG[a.art], rb = ART_RANG[b.art];
+      if (ra !== rb) return ra - rb;
+      if (a.art === 'kunde') {
+        var c = ordnerName(a, kunden).localeCompare(ordnerName(b, kunden), 'de', { sensitivity: 'base' });
+        if (c) return c;
+      } else if (a.art === 'projekt') {
+        var s = nachSort(a, b);
+        if (s) return s;
+      }
+      var ca = a.created_at || '', cb = b.created_at || '';
+      return ca < cb ? -1 : ca > cb ? 1 : 0;
+    };
+  }
+
+  /* Baum einer Quest: [{ ordner, kinder: [...] }]. Archivierte samt Unterordnern nur mit archivierte: true. */
+  function ordnerBaum(questId, ordner, kunden, opt) {
+    var mitArchiv = !!(opt && opt.archivierte);
+    var cmp = vergleichOrdner(kunden);
+    var kinderVon = {};
+    (ordner || []).forEach(function (o) {
+      if (o.quest_id !== questId) return;
+      if (o.archiviert && !mitArchiv) return;
+      var k = o.eltern_id == null ? '' : o.eltern_id;
+      (kinderVon[k] || (kinderVon[k] = [])).push(o);
+    });
+    function bau(k) {
+      return (kinderVon[k] || []).slice().sort(cmp).map(function (o) {
+        return { ordner: o, kinder: bau(o.id) };
+      });
+    }
+    return bau('');
+  }
+
+  /* Pfad von der Wurzel bis zum Ordner; unbekannte Id: []. */
+  function ordnerPfad(ordnerId, ordner) {
+    var m = ordnerMap(ordner), pfad = [], id = ordnerId, n = 0;
+    while (id != null && m[id] && n++ < 20) { pfad.unshift(m[id]); id = m[id].eltern_id; }
+    return pfad;
+  }
+
+  /* Kunde ergibt sich aus dem Kunden-Ordner im Pfad (Ordner selbst oder Elternteil). */
+  function ordnerKunde(ordnerId, ordner) {
+    var pfad = ordnerPfad(ordnerId, ordner);
+    for (var i = pfad.length - 1; i >= 0; i--) {
+      if (pfad[i].art === 'kunde') return pfad[i].kunde_id == null ? null : pfad[i].kunde_id;
+    }
+    return null;
+  }
+
+  /* Ordner-Id und alle Ids darunter. */
+  function nachkommen(ordnerId, ordner) {
+    var res = [ordnerId], i = 0;
+    while (i < res.length) {
+      for (var j = 0; j < ordner.length; j++) {
+        if (ordner[j].eltern_id === res[i] && res.indexOf(ordner[j].id) < 0) res.push(ordner[j].id);
+      }
+      i++;
+    }
+    return res;
+  }
+
+  /* Darf in dieser Quest unter eltern (oder an der Wurzel, eltern = null) ein Ordner dieser Art liegen? */
+  function ordnerErlaubt(quest, eltern, art) {
+    if (art === 'intern' || art === 'extern') return !eltern && !!quest.firma;
+    if (art === 'kunde') return !!eltern && eltern.art === 'extern';
+    if (art === 'projekt') {
+      if (!quest.firma) return !eltern;
+      return !!eltern && (eltern.art === 'intern' || eltern.art === 'kunde');
+    }
+    return false;
+  }
+
+  /* Zeit je Ordner im Zeitraum, kumuliert über alle Unterordner. Zeit folgt task.ordner_id. */
+  function summeProOrdner(zeiten, tasks, ordner, vonIso, bisIso, jetzt) {
+    var m = ordnerMap(ordner), tm = {}, r = {};
+    tasks.forEach(function (t) { tm[t.id] = t; });
+    zeiten.forEach(function (z) {
+      if (!z.task_id || !imZeitraum(z, vonIso, bisIso)) return;
+      var t = tm[z.task_id];
+      if (!t || t.ordner_id == null) return;
+      var sek = dauerSek(z, jetzt);
+      ordnerPfad(t.ordner_id, ordner).forEach(function (o) { r[o.id] = (r[o.id] || 0) + sek; });
+    });
+    return r;
+  }
+
+  /* 'extern', wenn der Ordnerpfad der Aufgabe einen Extern-Ordner enthält, sonst 'intern'. */
+  function bereich(task, ordner) {
+    if (!task || task.ordner_id == null) return 'intern';
+    return ordnerPfad(task.ordner_id, ordner).some(function (o) { return o.art === 'extern'; }) ? 'extern' : 'intern';
+  }
+
+  /* Aufgaben in archivierten Ordnern (oder unter archivierten) sind ausgeblendet. */
+  function aufgabeSichtbar(task, ordner) {
+    if (!task || task.ordner_id == null) return true;
+    return !ordnerPfad(task.ordner_id, ordner).some(function (o) { return o.archiviert; });
+  }
+
+  /* Ids, die ohne gespeicherten Zustand offen sind: Quest und Ordnerpfad der laufenden Aufgabe. */
+  function offenStandard(laufend, tasks, ordner) {
+    if (!laufend) return [];
+    var res = laufend.quest_id ? [laufend.quest_id] : [];
+    var t = laufend.task_id ? tasks.filter(function (x) { return x.id === laufend.task_id; })[0] : null;
+    if (t && t.ordner_id != null) {
+      ordnerPfad(t.ordner_id, ordner).forEach(function (o) { res.push(o.id); });
+    }
+    return res;
+  }
+
+  /* Ordnerbaum einer Quest mit Zeiten: nur Knoten mit sek > 0, nach sek absteigend. */
+  function ordnerSekBaum(knoten, summen) {
+    return knoten.map(function (n) {
+      return { ordner: n.ordner, sek: summen[n.ordner.id] || 0, kinder: ordnerSekBaum(n.kinder, summen) };
+    }).filter(function (n) { return n.sek > 0; }).sort(nachSekAbsteigend);
+  }
+
+  function rueckblick(zeiten, quests, tasks, kunden, vonIso, bisIso, jetzt, ordner) {
+    ordner = ordner || [];
     var questMap = {}, taskMap = {}, kundeMap = {};
     quests.forEach(function (q) { questMap[q.id] = q; });
     tasks.forEach(function (t) { taskMap[t.id] = t; });
     kunden.forEach(function (k) { kundeMap[k.id] = k; });
-    var res = { gesamtSek: 0, quests: [], firma: { gesamtSek: 0, abrechenbarSek: 0, kunden: [], personen: [] } };
+    var res = { gesamtSek: 0, quests: [], firma: { gesamtSek: 0, abrechenbarSek: 0, internSek: 0, externSek: 0, kunden: [], personen: [] } };
     var qAgg = {}, kAgg = {}, pAgg = {};
     zeiten.forEach(function (z) {
       if (!imZeitraum(z, vonIso, bisIso)) return;
@@ -131,16 +271,19 @@ window.LW = window.LW || {};
       var sek = dauerSek(z, jetzt);
       var abr = z.abrechenbar ? sek : 0;
       res.gesamtSek += sek;
-      var qa = qAgg[q.id] || (qAgg[q.id] = { quest: q, sek: 0, tm: {}, tl: [] });
+      var qa = qAgg[q.id] || (qAgg[q.id] = { quest: q, sek: 0, ohne: 0, tm: {}, tl: [] });
       qa.sek += sek;
       var tid = z.task_id && taskMap[z.task_id] ? z.task_id : '';
       var te = qa.tm[tid];
       if (!te) { te = qa.tm[tid] = { task: tid ? taskMap[tid] : null, sek: 0 }; qa.tl.push(te); }
       te.sek += sek;
+      var tObj = tid ? taskMap[tid] : null;
+      if (!tObj || tObj.ordner_id == null || !ordnerMap(ordner)[tObj.ordner_id]) qa.ohne += sek;
       if (q.firma) {
         var f = res.firma;
         f.gesamtSek += sek;
         f.abrechenbarSek += abr;
+        if (bereich(tObj, ordner) === 'extern') f.externSek += sek; else f.internSek += sek;
         var kid = z.kunde_id && kundeMap[z.kunde_id] ? z.kunde_id : '';
         var ke = kAgg[kid] || (kAgg[kid] = { kunde: kid ? kundeMap[kid] : null, sek: 0, abrechenbarSek: 0 });
         ke.sek += sek; ke.abrechenbarSek += abr;
@@ -148,9 +291,11 @@ window.LW = window.LW || {};
         pe.sek += sek; pe.abrechenbarSek += abr;
       }
     });
+    var summen = summeProOrdner(zeiten, tasks, ordner, vonIso, bisIso, jetzt);
     Object.keys(qAgg).forEach(function (id) {
       var a = qAgg[id];
-      res.quests.push({ quest: a.quest, sek: a.sek, tasks: a.tl.sort(nachSekAbsteigend) });
+      res.quests.push({ quest: a.quest, sek: a.sek, tasks: a.tl.sort(nachSekAbsteigend),
+        ordner: ordnerSekBaum(ordnerBaum(a.quest.id, ordner, kunden, { archivierte: true }), summen), ohneOrdnerSek: a.ohne });
     });
     res.quests.sort(nachSekAbsteigend);
     Object.keys(kAgg).forEach(function (k) { res.firma.kunden.push(kAgg[k]); });
@@ -232,6 +377,8 @@ window.LW = window.LW || {};
 
   window.LW.logic = { isoTag: isoTag, wochenTage: wochenTage, kalenderwoche: kalenderwoche, dauerSek: dauerSek, formatDauer: formatDauer, formatTimer: formatTimer,
     heuteAnsicht: heuteAnsicht, istUeberfaellig: istUeberfaellig, backlog: backlog,
-    summeProQuest: summeProQuest, rueckblick: rueckblick, laufendZuLange: laufendZuLange,
+    summeProQuest: summeProQuest, rueckblick: rueckblick,
+    ordnerName: ordnerName, ordnerBaum: ordnerBaum, ordnerPfad: ordnerPfad, ordnerKunde: ordnerKunde, nachkommen: nachkommen,
+    ordnerErlaubt: ordnerErlaubt, summeProOrdner: summeProOrdner, bereich: bereich, aufgabeSichtbar: aufgabeSichtbar, offenStandard: offenStandard, laufendZuLange: laufendZuLange,
     normalisieren: normalisieren, befehlsSuche: befehlsSuche, alleSeiten: alleSeiten };
 })();

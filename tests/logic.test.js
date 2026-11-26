@@ -1,5 +1,5 @@
 (function () {
-  var t = LWTest.test, eq = LWTest.eq;
+  var t = LWTest.test, eq = LWTest.eq, ok = LWTest.ok;
   var L = function () { return window.LW && window.LW.logic; };
 
   t('isoTag lokal', function () {
@@ -144,6 +144,154 @@
     eq(cmdTexte('xyzq'), []);
     eq(L().befehlsSuche('he', [{ text: 'Sache' }, { text: 'Heute' }])[0].text, 'Heute');
     eq(L().befehlsSuche('uebe', [{ text: 'Neue Aufgabe', extra: 'Aktion' }, { text: 'Fokus', extra: 'laufende Aufgabe' }]), []);
+  });
+  /* ---- Ordner ---- */
+  function od(id, quest, eltern, art, name, kunde, o) {
+    var b = { id: id, quest_id: quest, eltern_id: eltern, art: art, name: name, kunde_id: kunde, sortierung: 0, archiviert: false, created_at: '2026-11-01T00:00:00Z' };
+    for (var k in o) b[k] = o[k];
+    return b;
+  }
+  var QF = { id: 'qf', owner_id: ME, name: 'Firma', farbe: '#00f', geteilt: false, firma: true, sortierung: 1, archiviert: false };
+  var QP = { id: 'qp', owner_id: ME, name: 'Master', farbe: '#f00', geteilt: false, firma: false, sortierung: 2, archiviert: false };
+  var oI = od('I', 'qf', null, 'intern', 'Intern', null);
+  var oE = od('E', 'qf', null, 'extern', 'Extern', null);
+  var oK = od('K', 'qf', 'E', 'kunde', 'Susanne Kreutz', 'k-susanne');
+  var oW = od('W', 'qf', 'K', 'projekt', 'Website', null);
+  var oM = od('M', 'qf', 'I', 'projekt', 'Marketing', null);
+  var oT = od('T', 'qp', null, 'projekt', 'Thesis', null);
+  var ordnerAlle = [oM, oW, oK, oE, oI, oT];
+  var kundenO = [{ id: 'k-susanne', name: 'Susanne Kreutz' }];
+  function namen(a) { return a.map(function (x) { return x.name; }); }
+  function tkO(id, quest, ordnerId, o) { var b = tk(id, quest, o || {}); b.ordner_id = ordnerId; return b; }
+
+  t('ordnerBaum: Wurzeln, Kinder, Reihenfolge Intern vor Extern', function () {
+    var b = L().ordnerBaum('qf', ordnerAlle, kundenO, {});
+    eq(namen(b.map(function (n) { return n.ordner; })), ['Intern', 'Extern']);
+    eq(b[1].kinder[0].ordner.id, 'K');
+    eq(b[1].kinder[0].kinder[0].ordner.id, 'W');
+    eq(b[0].kinder[0].ordner.id, 'M');
+    eq(L().ordnerBaum('qp', ordnerAlle, kundenO, {}).map(function (n) { return n.ordner.id; }), ['T']);
+  });
+  t('ordnerBaum: Kunden alphabetisch ohne Groß-/Kleinschreibung, Projekte nach sortierung', function () {
+    var zeta = od('Z', 'qf', 'E', 'kunde', 'Zeta', 'kz');
+    var atel = od('A', 'qf', 'E', 'kunde', 'atelier', 'ka');
+    var p2 = od('P2', 'qf', 'I', 'projekt', 'Zwei', null, { sortierung: 2 });
+    var p1 = od('P1', 'qf', 'I', 'projekt', 'Eins', null, { sortierung: 1, created_at: '2026-11-03T00:00:00Z' });
+    var p1b = od('P1b', 'qf', 'I', 'projekt', 'Eins b', null, { sortierung: 1, created_at: '2026-11-02T00:00:00Z' });
+    var b = L().ordnerBaum('qf', [zeta, atel, oE, oI, p2, p1, p1b], [], {});
+    eq(namen(b[1].kinder.map(function (n) { return n.ordner; })), ['atelier', 'Zeta']);
+    eq(b[0].kinder.map(function (n) { return n.ordner.id; }), ['P1b', 'P1', 'P2']);
+  });
+  t('ordnerBaum: Kundenname live aus kunden', function () {
+    var b = L().ordnerBaum('qf', [oE, oK], [{ id: 'k-susanne', name: 'Anna Neu' }], {});
+    eq(L().ordnerName(oK, [{ id: 'k-susanne', name: 'Anna Neu' }]), 'Anna Neu');
+    eq(b[0].kinder.length, 1);
+  });
+  t('ordnerBaum: archivierte nur mit archivierte:true', function () {
+    var oWa = od('W', 'qf', 'K', 'projekt', 'Website', null, { archiviert: true });
+    var oKa = od('K', 'qf', 'E', 'kunde', 'Susanne Kreutz', 'k-susanne', { archiviert: true });
+    var alle = [oI, oE, oKa, oWa];
+    eq(L().ordnerBaum('qf', alle, kundenO, {})[1].kinder, []);
+    eq(L().ordnerBaum('qf', alle, kundenO, { archivierte: true })[1].kinder[0].kinder[0].ordner.id, 'W');
+  });
+  t('ordnerName: Kunde ohne kunde_id wird (gelöscht), sonst gespeicherter Name', function () {
+    eq(L().ordnerName(od('X', 'qf', 'E', 'kunde', 'Alt GmbH', null), kundenO), 'Alt GmbH (gelöscht)');
+    eq(L().ordnerName(oW, kundenO), 'Website');
+    eq(L().ordnerName(oK, []), 'Susanne Kreutz');
+  });
+  t('ordnerPfad: Wurzel bis Blatt, unbekannt leer', function () {
+    eq(namen(L().ordnerPfad('W', ordnerAlle)), ['Extern', 'Susanne Kreutz', 'Website']);
+    eq(L().ordnerPfad('nix', ordnerAlle), []);
+    eq(L().ordnerPfad(null, ordnerAlle), []);
+  });
+  t('ordnerKunde: Kunden-Ordner oder Kunde als Elternteil, sonst null', function () {
+    eq(L().ordnerKunde('W', ordnerAlle), 'k-susanne');
+    eq(L().ordnerKunde('M', ordnerAlle), null);
+    eq(L().ordnerKunde('K', ordnerAlle), 'k-susanne');
+    eq(L().ordnerKunde('E', ordnerAlle), null);
+    eq(L().ordnerKunde(null, ordnerAlle), null);
+  });
+  t('nachkommen: inklusive sich selbst', function () {
+    eq(L().nachkommen('E', ordnerAlle).sort(), ['E', 'K', 'W']);
+    eq(L().nachkommen('W', ordnerAlle), ['W']);
+  });
+  t('ordnerErlaubt: Elternregeln', function () {
+    eq(L().ordnerErlaubt(QF, oE, 'kunde'), true);
+    eq(L().ordnerErlaubt(QF, null, 'projekt'), false);
+    eq(L().ordnerErlaubt(QP, null, 'projekt'), true);
+    eq(L().ordnerErlaubt(QF, oI, 'kunde'), false);
+    eq(L().ordnerErlaubt(QF, oI, 'projekt'), true);
+    eq(L().ordnerErlaubt(QF, oK, 'projekt'), true);
+    eq(L().ordnerErlaubt(QF, oE, 'projekt'), false);
+    eq(L().ordnerErlaubt(QF, null, 'intern'), true);
+    eq(L().ordnerErlaubt(QF, null, 'extern'), true);
+    eq(L().ordnerErlaubt(QP, null, 'intern'), false);
+    eq(L().ordnerErlaubt(QF, oE, 'intern'), false);
+    eq(L().ordnerErlaubt(QP, oT, 'projekt'), false);
+    eq(L().ordnerErlaubt(QF, null, 'kunde'), false);
+  });
+  var tasksO = [tkO('tw', 'qf', 'W'), tkO('tm', 'qf', 'M'), tkO('tk', 'qf', 'K'), tkO('tnone', 'qf', null)];
+  var zO = [
+    z('o1', ME, 'qf', 'tw', 'k-susanne', new Date(2026, 10, 24, 8, 0), new Date(2026, 10, 24, 9, 0), true),
+    z('o2', ME, 'qf', 'tm', null, new Date(2026, 10, 24, 9, 0), new Date(2026, 10, 24, 9, 30), false)
+  ];
+  t('summeProOrdner: kumulativ inklusive Nachkommen', function () {
+    var r = L().summeProOrdner(zO, tasksO, ordnerAlle, '2026-11-24', '2026-11-24', JETZT);
+    eq(Object.keys(r).sort().map(function (k) { return k + ':' + r[k]; }), ['E:3600', 'I:1800', 'K:3600', 'M:1800', 'W:3600']);
+    eq(L().summeProOrdner(zO, tasksO, ordnerAlle, '2026-11-25', '2026-11-25', JETZT), {});
+  });
+  t('summeProOrdner: Zeit folgt der Aufgabe beim Umsortieren', function () {
+    var t2 = [tkO('tw', 'qf', 'M'), tkO('tm', 'qf', 'M')];
+    var r = L().summeProOrdner(zO, t2, ordnerAlle, '2026-11-24', '2026-11-24', JETZT);
+    eq(r.M, 5400); eq(r.I, 5400);
+    ok(!r.E, 'E ohne Zeit');
+  });
+  t('bereich: extern nur mit extern-Ordner im Pfad', function () {
+    eq(L().bereich(tasksO[0], ordnerAlle), 'extern');
+    eq(L().bereich(tasksO[1], ordnerAlle), 'intern');
+    eq(L().bereich(tasksO[3], ordnerAlle), 'intern');
+    eq(L().bereich(null, ordnerAlle), 'intern');
+  });
+  t('rueckblick: Intern + Extern = Firma, Eintrag ohne Aufgabe intern, Ordnerbaum je Quest', function () {
+    var zz = zO.concat([z('o3', ME, 'qf', null, null, new Date(2026, 10, 24, 10, 0), new Date(2026, 10, 24, 10, 10), false),
+      z('o4', ME, 'qf', 'tnone', null, new Date(2026, 10, 24, 11, 0), new Date(2026, 10, 24, 11, 5), false)]);
+    var r = L().rueckblick(zz, [QF], tasksO, kundenO, '2026-11-24', '2026-11-24', JETZT, ordnerAlle);
+    eq(r.firma.gesamtSek, 3600 + 1800 + 600 + 300);
+    eq(r.firma.externSek, 3600);
+    eq(r.firma.internSek, 1800 + 600 + 300);
+    eq(r.firma.internSek + r.firma.externSek, r.firma.gesamtSek);
+    eq(r.quests[0].ohneOrdnerSek, 900);
+    var o = r.quests[0].ordner;
+    eq(o.map(function (n) { return [n.ordner.id, n.sek]; }), [['E', 3600], ['I', 1800]]);
+    eq(o[0].kinder[0].kinder[0].ordner.id, 'W');
+    eq(o[0].kinder[0].kinder[0].sek, 3600);
+  });
+  t('rueckblick: ohne ordner-Parameter wie bisher', function () {
+    var r = L().rueckblick(zeiten, quests, tasks, [], '2026-11-24', '2026-11-24', JETZT);
+    eq(r.quests[0].ordner, []);
+    eq(r.firma.internSek + r.firma.externSek, r.firma.gesamtSek);
+  });
+  t('aufgabeSichtbar und heuteAnsicht: Aufgabe in archiviertem Ordner verschwindet', function () {
+    var arch = ordnerAlle.map(function (x) { return x.id === 'W' ? od('W', 'qf', 'K', 'projekt', 'Website', null, { archiviert: true }) : x; });
+    var ta = [tkO('a', 'qf', 'W', { tag: HEUTE }), tkO('b', 'qf', 'M', { tag: HEUTE })];
+    eq(L().aufgabeSichtbar(ta[0], arch), false);
+    eq(L().aufgabeSichtbar(ta[0], ordnerAlle), true);
+    eq(L().aufgabeSichtbar(tkO('c', 'qf', null), arch), true);
+    eq(ids(L().heuteAnsicht([QF], ta, ME, HEUTE, arch)[0].tasks), ['b']);
+    eq(ids(L().heuteAnsicht([QF], ta, ME, HEUTE)[0].tasks), ['a', 'b']);
+    eq(ids(L().backlog(ta, [QF], {}, ME, arch)), ['b']);
+  });
+  t('backlog: ordnerId liefert Ordner und Nachkommen', function () {
+    var tb = [tkO('w', 'qf', 'W'), tkO('k', 'qf', 'K'), tkO('m', 'qf', 'M'), tkO('n', 'qf', null)];
+    eq(ids(L().backlog(tb, [QF], { ordnerId: 'E' }, ME, ordnerAlle)).sort(), ['k', 'w']);
+    eq(ids(L().backlog(tb, [QF], { ordnerId: 'W' }, ME, ordnerAlle)), ['w']);
+  });
+  t('offenStandard: Quest und Ordnerpfad der laufenden Aufgabe', function () {
+    var lauf = z('l', ME, 'qf', 'tw', null, new Date(2026, 10, 24, 8, 0), null, false);
+    var r = L().offenStandard(lauf, tasksO, ordnerAlle);
+    eq(r.slice().sort(), ['E', 'K', 'W', 'qf']);
+    eq(L().offenStandard(null, tasksO, ordnerAlle), []);
+    eq(L().offenStandard(z('l2', ME, 'qf', null, null, new Date(), null, false), tasksO, ordnerAlle), ['qf']);
   });
   /* ---- Alle Zeilen seitenweise laden (Supabase liefert höchstens 1000 je Abfrage) ---- */
   function seitenQuelle(n) {
