@@ -255,7 +255,15 @@ window.LW = window.LW || {};
       fertig = true;
       if (speichern && neu !== o.name) {
         try { await DB.saveOrdner({ id: o.id, name: neu }); await ordnerNeu(); }
-        catch (e) { console.error(e); toast(fehlerText(e), true); }
+        catch (e) {
+          // Fehler sichtbar lassen, Feld mit der Eingabe offen halten: erneut versuchen (Enter) oder Esc
+          console.error(e);
+          toast(fehlerText(e), true);
+          fertig = false;
+          input.setAttribute('aria-invalid', 'true');
+          input.focus();
+          return;
+        }
         input.remove(); link.classList.remove('b-verdeckt');
         neuZeichnen();
         fokusAuf(o.id, '.b-name');
