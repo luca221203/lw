@@ -391,7 +391,19 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
 /* ---------- Fokus ---------- */
 .seite.fokus{max-width:640px;margin:0 auto}
 .fokus-buehne{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--s2);min-height:min(60vh,560px);padding:var(--s5) 0 var(--s7);text-align:center}
-.fokus-quest{display:inline-flex;align-items:center;gap:var(--s2);color:var(--muted);font-size:var(--fs-sm)}
+/* Pfad über dem Titel (Quest › Ordner › …) und Abrechenbar/Intern darunter */
+.fokus-pfad{max-width:100%}
+.fokus-pfad ol{justify-content:center;margin:0}
+.fokus-kunde{padding-left:var(--s2);white-space:nowrap}
+.abr-knopf{display:inline-flex;align-items:center;gap:var(--s2);max-width:100%;height:var(--h-sm);margin-top:var(--s1);padding:0 var(--s3);border:1px solid var(--line-strong);border-radius:var(--r-pill);background:var(--raised);color:var(--muted);font-size:var(--fs-sm);font-weight:500;white-space:nowrap;cursor:pointer}
+.abr-knopf.ist-abr{border-color:color-mix(in srgb,var(--ok) 40%,transparent);background:var(--ok-wash);color:var(--ok)}
+.abr-knopf[aria-disabled="true"]{cursor:default}
+.abr-knopf:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (hover:hover){.abr-knopf:not([aria-disabled="true"]):hover{border-color:var(--faint);color:var(--ink)}.abr-knopf.ist-abr:not([aria-disabled="true"]):hover{border-color:var(--ok);color:var(--ok)}}
+.abr-text{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.abr-punkt{flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.ist-abr .abr-punkt,.abr-punkt.ist-abr{background:var(--ok)}
+.fokus-abr-info{display:inline-flex;max-width:100%;align-items:center;gap:var(--s2);margin-top:var(--s1);color:var(--muted);font-size:var(--fs-sm)}
 .fokus-titel{max-width:32ch;font-size:var(--fs-xl);overflow-wrap:anywhere}
 .fokus-label{margin-top:var(--s6);color:var(--muted);font-size:var(--fs-sm)}
 .fokus-timer{font-size:clamp(56px,12vw,96px);font-weight:600;line-height:1.1;letter-spacing:-.02em}
@@ -556,7 +568,7 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
 .rb-quest summary::-webkit-details-marker{display:none}
 .rb-quest summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--r-lg)}
 .rb-pfeil .i{width:16px;height:16px;color:var(--muted);transition:transform var(--dur-2) var(--ease-out)}
-.rb-quest[open] .rb-pfeil .i{transform:rotate(90deg)}
+.rb-quest[open] > summary .rb-pfeil .i,.rb-ordner[open] > summary .rb-pfeil .i{transform:rotate(90deg)}
 .rb-name{display:flex;align-items:center;gap:var(--s2);min-width:0}
 .rb-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm)}
 .rb-balken{position:relative;display:block;height:8px;border-radius:var(--r-pill);background:var(--sunken);overflow:hidden}
@@ -568,6 +580,26 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
 .rb-tasks{list-style:none;margin:0;padding:0 var(--s4) var(--s2) calc(var(--s3) + 16px + var(--s3) + 16px)}
 .rb-tasks li{display:flex;justify-content:space-between;gap:var(--s3);min-height:var(--h-sm);align-items:center;color:var(--muted);font-size:var(--fs-sm)}
 .rb-task{min-width:0;overflow-wrap:anywhere}
+/* Ordnerbaum im Quest-Block: Ordner aufklappbar, Aufgaben direkt im Ordner, eine Stufe = Pfeilbreite + Abstand */
+.rb-tasks{--rb-stufe:calc(16px + var(--s2))}
+.rb-tasks li:has(> .rb-ordner){display:block;margin-left:calc(-1 * var(--rb-stufe))}
+.rb-ordner summary{display:flex;align-items:center;gap:var(--s2);min-height:var(--h-sm);font-size:var(--fs-sm);cursor:pointer;list-style:none;border-radius:var(--r-sm)}
+.rb-ordner summary::-webkit-details-marker{display:none}
+.rb-ordner summary:focus-visible{outline:2px solid var(--accent);outline-offset:0}
+@media (hover:hover){.rb-ordner summary:hover .rb-oname{color:var(--ink)}}
+.rb-oname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;color:var(--ink)}
+.rb-ordner .rb-zahl{color:var(--ink)}
+.rb-baum{list-style:none;margin:0;padding:0 0 0 calc(2 * var(--rb-stufe))}
+.rb-tasks .rb-t{display:flex;justify-content:space-between;gap:var(--s3);min-height:var(--h-sm);align-items:center;color:var(--muted);font-size:var(--fs-sm)}
+/* Intern / Extern: ein geteilter Balken */
+.rb-bereich{margin:0 0 var(--s5)}
+.rb-bereich-zeile{display:grid;grid-template-columns:auto minmax(80px,1fr) auto;align-items:center;column-gap:var(--s4);min-height:var(--h-zeile);padding:var(--s2) var(--s4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
+.rb-bereich-wert{display:flex;align-items:baseline;gap:var(--s2);margin:0;font-size:var(--fs-sm);font-weight:500;white-space:nowrap}
+.rb-bereich-name{color:var(--muted);font-weight:500}
+.rb-geteilt{display:flex;height:8px;gap:2px;border-radius:var(--r-pill);background:var(--sunken);overflow:hidden}
+.rb-geteilt i{background:var(--faint)}
+.rb-geteilt b{background:var(--accent)}
+.rb-bereich .rb-legende{margin:var(--s2) 0 0}
 .rb-kennzahlen{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s3);margin:0 0 var(--s5)}
 .rb-kennzahlen > div{padding:var(--s3) var(--s4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg)}
 .rb-kennzahlen dt{color:var(--muted);font-size:var(--fs-xs);font-weight:500}
@@ -586,6 +618,8 @@ dialog.seitlich .aktionen{margin-top:auto;padding-top:var(--s5)}
   .rb-quest summary{grid-template-columns:16px minmax(0,1fr) 64px 44px;padding:var(--s2) var(--s3);row-gap:var(--s1)}
   .rb-quest summary .rb-balken{grid-column:2/-1;grid-row:2}
   .rb-tasks{padding-left:calc(var(--s3) + 16px + var(--s3))}
+  .rb-bereich-zeile{grid-template-columns:auto auto;justify-content:space-between;row-gap:var(--s2);padding:var(--s2) var(--s3)}
+  .rb-geteilt{grid-column:1/-1;grid-row:2}
   .zeit-meta{flex-wrap:wrap}
   .rb-eintrag{flex-wrap:wrap}
 }
@@ -610,6 +644,8 @@ dialog.befehle{align-self:flex-start;margin-top:min(14vh,120px);width:min(560px,
 @media (hover:none){.bf-tasten{display:none}}
 @media (max-width:767px){dialog.befehle{margin-top:var(--s3)}}
 .bf-liste li .dot{margin:0 5px}
+.bf-liste li .bf-ordner{display:grid;flex:none}
+.bf-liste li .bf-ordner .i,.bf-liste li[aria-selected="true"] .bf-ordner .i{color:var(--q,var(--muted))}
 /* Tooltips gibt es nur mit Maus oder Tastatur; auf Touch-Geräten würden sie den Seitenrand überragen */
 @media (hover:none){[data-tip]::after{display:none}}
 

@@ -1,4 +1,4 @@
-/* Befehlsleiste (Strg/Cmd+K): Aufgaben, Ansichten und Aktionen mit einer Suche erreichen.
+/* Befehlsleiste (Strg/Cmd+K): Aufgaben, Ordner, Ansichten und Aktionen mit einer Suche erreichen.
    LW.app.befehle() öffnet sie im gemeinsamen Dialog. Pfeiltasten + Enter, Alt+Enter bearbeitet, Esc schließt.
    Solange der Dialog offen ist, ignoriert die Hülle die Einzeltasten (N, F). */
 window.LW = window.LW || {};
@@ -28,13 +28,27 @@ window.LW = window.LW || {};
         return { art: 'Aufgabe', text: t.titel, extra: q.name || '', quest: q, task: t,
           lauf: () => app.fokusStarten(t), bearbeiten: () => LW.dialoge.aufgabe(t) };
       });
-    return { ansichten, aktionen, tasks };
+    /* Ordner: Text = Pfad ohne Quest (Intern/Extern › Kunde › Projekt), öffnet die Ordner-Ansicht.
+       Alt+Enter: Umbenennen, wo das Menü es auch anbietet (Projekte); sonst nichts. */
+    const ordner = (S.ordner || []).filter(o => {
+      const q = S.quests.find(x => x.id === o.quest_id);
+      return q && !q.archiviert && !L.ordnerPfad(o.id, S.ordner).some(x => x.archiviert);
+    }).map(o => {
+      const q = S.quests.find(x => x.id === o.quest_id);
+      const pfad = L.ordnerPfad(o.id, S.ordner);
+      const eltern = pfad.length > 1 ? pfad[pfad.length - 2] : null;
+      return { art: 'Ordner', text: pfad.map(x => L.ordnerName(x, S.kunden)).join(' › '), extra: q.name + ' Ordner', quest: q, ordner: o,
+        lauf: () => app.go('ordner', o.id),
+        bearbeiten: o.art === 'projekt' ? () => LW.ordner.dialog({ quest: q, eltern, art: 'projekt', ordner: o }) : null };
+    }).sort((a, b) => a.text.localeCompare(b.text, 'de', { sensitivity: 'base' }));
+    return { ansichten, aktionen, ordner, tasks };
   }
 
   function zeile(e, i, aktiv) {
     const q = e.quest;
-    const vorne = e.task ? `<span class="dot" style="--q:${farbe(q && q.farbe)}" aria-hidden="true"></span>` : icon(e.symbol);
-    const hinten = e.task ? esc(q && q.name || '') : esc(e.art);
+    const vorne = e.task ? `<span class="dot" style="--q:${farbe(q && q.farbe)}" aria-hidden="true"></span>`
+      : e.ordner ? `<span class="bf-ordner" style="--q:${farbe(q && q.farbe)}">${icon('i-ordner')}</span>` : icon(e.symbol);
+    const hinten = e.task || e.ordner ? esc(q && q.name || '') : esc(e.art);
     return `<li id="bf-${i}" role="option" aria-selected="${i === aktiv}" data-i="${i}">${vorne}<span class="bf-text">${esc(e.text)}</span><span class="bf-art">${hinten}</span></li>`;
   }
 
@@ -44,9 +58,9 @@ window.LW = window.LW || {};
     const alle = eintraege();
     const d = openDlg(`<div class="dlg bf" role="search">
       <h2 class="sr-only" id="bfTitel">Befehlsleiste</h2>
-      <label class="sr-only" for="bfEingabe">Aufgabe, Ansicht oder Aktion suchen</label>
+      <label class="sr-only" for="bfEingabe">Aufgabe, Ordner, Ansicht oder Aktion suchen</label>
       <div class="bf-feld">${icon('i-suche')}
-        <input id="bfEingabe" type="text" role="combobox" aria-expanded="true" aria-controls="bfListe" aria-autocomplete="list" aria-activedescendant="" placeholder="Aufgabe, Ansicht, Aktion" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go"></div>
+        <input id="bfEingabe" type="text" role="combobox" aria-expanded="true" aria-controls="bfListe" aria-autocomplete="list" aria-activedescendant="" placeholder="Aufgabe, Ordner, Ansicht, Aktion" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go"></div>
       <ul id="bfListe" class="bf-liste" role="listbox" aria-label="Ergebnisse"></ul>
       <p class="bf-leer" id="bfLeer" hidden>Nichts gefunden. Probier ein anderes Wort.</p>
       <p class="bf-tasten" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> wählen</span><span><kbd>⏎</kbd> Fokus oder öffnen</span><span><kbd>Alt</kbd><kbd>⏎</kbd> bearbeiten</span><span><kbd>Esc</kbd> schließen</span></p></div>`);
@@ -57,7 +71,7 @@ window.LW = window.LW || {};
 
     function zeichnen() {
       const q = eingabe.value.trim();
-      treffer = q ? L.befehlsSuche(q, [...alle.ansichten, ...alle.aktionen, ...alle.tasks]).slice(0, MAX)
+      treffer = q ? L.befehlsSuche(q, [...alle.ansichten, ...alle.aktionen, ...alle.ordner, ...alle.tasks]).slice(0, MAX)
         : [...alle.ansichten, ...alle.aktionen, ...alle.tasks.slice(0, MAX_LEER)];
       aktiv = 0;
       liste.innerHTML = treffer.map((e, i) => zeile(e, i, aktiv)).join('');

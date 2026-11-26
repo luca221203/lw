@@ -1,6 +1,6 @@
 /* Rückblick: wohin ging die Zeit? Tag oder Woche, ‹ › zum Blättern.
-   Oben die eigene Summe, je Quest ein Balken (aufklappbar bis zur Aufgabe), bei Firma-Quests Gesamt vs. abrechenbar
-   je Kunde und je Person (beide), darunter die Einträge. Adresse: #rueckblick/tag/<tag> bzw. #rueckblick/woche/<montag>. */
+   Oben die eigene Summe, je Quest ein Balken (aufklappbar: Ordner → Unterordner → Aufgabe, „Ohne Ordner“), bei
+   Firma-Quests Gesamt vs. abrechenbar, Intern / Extern, je Kunde und je Person (beide), darunter die Einträge. Adresse: #rueckblick/tag/<tag> bzw. #rueckblick/woche/<montag>. */
 window.LW = window.LW || {};
 (function () {
   const { $, esc, farbe } = window.LW.ui;
@@ -53,15 +53,53 @@ window.LW = window.LW || {};
     return `<span class="rb-balken" aria-hidden="true"${q ? ` style="--q:${farbe(q)}"` : ''}><i style="width:${w.toFixed(1)}%"></i>${hell != null ? `<b style="width:${(Math.min(100, hell * 100)).toFixed(1)}%"></b>` : ''}</span>`;
   }
 
+  /* Aufklappbarer Baum einer Quest: Ordner → Unterordner → Aufgabe, dazu „Ohne Ordner“.
+     Ordner kommen aus e.ordner (nur mit Zeit, nach Zeit absteigend); Aufgaben liegen direkt in ihrem Ordner. */
+  const taskZeile = t => `<li class="rb-t"><span class="rb-task">${esc(t.task ? t.task.titel : 'Ohne Aufgabe')}</span><span class="rb-zahl zahl">${dauer(t.sek)}</span></li>`;
+  function ordnerZweig(titel, sek, inhalt) {
+    return `<li><details class="rb-ordner" open><summary><span class="rb-pfeil" aria-hidden="true">${icon('i-rechts')}</span>
+      <span class="rb-oname">${esc(titel)}</span><span class="rb-zahl zahl">${dauer(sek)}</span></summary>
+      <ul class="rb-baum">${inhalt}</ul></details></li>`;
+  }
+  function questBaum(e) {
+    if (!e.ordner || !e.ordner.length) return e.tasks.map(taskZeile).join('');
+    const direkt = {}, ohne = [];
+    const gezeigt = new Set();
+    (function merke(knoten) { knoten.forEach(n => { gezeigt.add(n.ordner.id); merke(n.kinder); }); })(e.ordner);
+    e.tasks.forEach(t => {
+      const oid = t.task && t.task.ordner_id;
+      if (oid && gezeigt.has(oid)) (direkt[oid] = direkt[oid] || []).push(t); else ohne.push(t);
+    });
+    const zweig = n => ordnerZweig(L.ordnerName(n.ordner, app.S.kunden), n.sek,
+      n.kinder.map(zweig).join('') + (direkt[n.ordner.id] || []).map(taskZeile).join(''));
+    const ohneSek = ohne.reduce((a, t) => a + t.sek, 0);
+    return e.ordner.map(zweig).join('') + (ohne.length ? ordnerZweig('Ohne Ordner', ohneSek, ohne.map(taskZeile).join('')) : '');
+  }
+
   function questBlock(e, gesamt) {
     const q = e.quest, a = gesamt ? e.sek / gesamt : 0;
-    const tasks = e.tasks.map(t => `<li><span class="rb-task">${esc(t.task ? t.task.titel : 'Ohne Aufgabe')}</span><span class="rb-zahl zahl">${dauer(t.sek)}</span></li>`).join('');
+    const tasks = questBaum(e);
     return `<li><details class="rb-quest">
       <summary><span class="rb-pfeil" aria-hidden="true">${icon('i-rechts')}</span>
         <span class="rb-name"><span class="dot" style="--q:${farbe(q.farbe)}"></span><span class="rb-text">${esc(q.name)}</span></span>
         ${balken(a, q.farbe)}
         <span class="rb-zahl zahl">${dauer(e.sek)}</span><span class="rb-pct zahl">${pct(e.sek, gesamt)}</span></summary>
       <ul class="rb-tasks">${tasks}</ul></details></li>`;
+  }
+
+  /* Intern / Extern: ein geteilter Balken. Zeit ohne Ordner oder ohne Aufgabe zählt als intern (Summe = Gesamt). */
+  function bereichZeile(f) {
+    const g = f.gesamtSek, i = f.internSek, x = f.externSek;
+    const w = v => (g ? v / g * 100 : 0).toFixed(1);
+    return `<div class="rb-bereich">
+      <h3 id="rbBereich">Intern / Extern</h3>
+      <div class="rb-bereich-zeile" role="group" aria-labelledby="rbBereich">
+        <p class="rb-bereich-wert"><span class="rb-bereich-name">Intern</span><span class="zahl">${dauer(i)}</span><span class="rb-pct zahl">${pct(i, g)}</span></p>
+        <span class="rb-geteilt" aria-hidden="true"><i style="width:${w(i)}%"></i><b style="width:${w(x)}%"></b></span>
+        <p class="rb-bereich-wert rechts"><span class="rb-bereich-name">Extern</span><span class="zahl">${dauer(x)}</span><span class="rb-pct zahl">${pct(x, g)}</span></p>
+      </div>
+      <p class="rb-legende">Zeit ohne Ordner oder ohne Aufgabe zählt als intern.</p>
+    </div>`;
   }
 
   function firmaBlock(f) {
@@ -80,6 +118,7 @@ window.LW = window.LW || {};
         <div><dt>Anteil abrechenbar</dt><dd class="zahl">${f.gesamtSek ? pct(ab, f.gesamtSek) : '–'}</dd></div>
         <div><dt>Nicht abrechenbar</dt><dd class="zahl">${dauer(nicht)}</dd></div>
       </dl>
+      ${f.gesamtSek ? bereichZeile(f) : ''}
       ${f.gesamtSek ? `<div class="rb-zwei">
         <div><h3>Je Kunde</h3><p class="rb-legende">Balken: Gesamt, dunkel abrechenbar. Prozent: Anteil abrechenbar.</p><ul class="rb-liste">${zeilen(f.kunden, x => x.kunde ? x.kunde.name : 'Ohne Kunde')}</ul></div>
         <div><h3>Je Person</h3><ul class="rb-liste">${zeilen(f.personen, x => personName(x.user_id))}</ul></div>
@@ -135,8 +174,8 @@ window.LW = window.LW || {};
       inhalt = '<div class="skelett" aria-hidden="true"><i></i><i></i><i></i></div>';
     } else {
       const eigene = alle.filter(z => z.user_id === S.ich.id);
-      const r = L.rueckblick(eigene, S.quests, S.tasks, S.kunden, von, bis, jetzt);
-      const fAlle = L.rueckblick(alle, S.quests, S.tasks, S.kunden, von, bis, jetzt).firma;
+      const r = L.rueckblick(eigene, S.quests, S.tasks, S.kunden, von, bis, jetzt, S.ordner || []);
+      const fAlle = L.rueckblick(alle, S.quests, S.tasks, S.kunden, von, bis, jetzt, S.ordner || []).firma;
       const f = S.quests.some(q => q.firma) || fAlle.gesamtSek > 0 ? fAlle : null;
       const leer = !alle.some(z => S.quests.some(q => q.id === z.quest_id));
       if (leer) {

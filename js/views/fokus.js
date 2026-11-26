@@ -38,6 +38,44 @@ window.LW = window.LW || {};
     return L.isoTag(d) === heute() ? Z().uhrzeit(d) : d.toLocaleDateString('de-DE', { weekday: 'short' }) + ' ' + Z().uhrzeit(d);
   }
 
+  /* ---------- Ordnerpfad und Abrechenbar/Intern ---------- */
+  const ordnerName = o => L.ordnerName(o, S().kunden);
+  /* Kundenname eines Eintrags: aktueller Name aus kunden, sonst der Kunden-Ordner im Pfad der Aufgabe. */
+  function kundeText(kid, task) {
+    if (!kid) return null;
+    const k = S().kunden.find(x => x.id === kid);
+    if (k) return k.name;
+    const o = task && task.ordner_id && L.ordnerPfad(task.ordner_id, S().ordner || []).find(x => x.art === 'kunde' && x.kunde_id === kid);
+    return o ? ordnerName(o) : 'Kunde';
+  }
+  /* Kopfzeile: Quest › Ordner › … (jeder Teil führt zur Ordner-Ansicht). Ohne Ordner: Quest (· Kunde). */
+  function kopfPfad(quest, task) {
+    if (!quest) return '';
+    const pfad = task && task.ordner_id ? L.ordnerPfad(task.ordner_id, S().ordner || []) : [];
+    const q = `<a href="${esc(app.hashVon('quest', quest.id))}"><span class="dot" aria-hidden="true"></span>${esc(quest.name)}</a>`;
+    if (!pfad.length) {
+      const kunde = task && task.kunde_id ? kundeText(task.kunde_id, task) : null;
+      return `<nav class="pfad fokus-pfad" aria-label="Quest"><ol><li>${q}${kunde ? `<span class="fokus-kunde">· ${esc(kunde)}</span>` : ''}</li></ol></nav>`;
+    }
+    const teile = [q].concat(pfad.map(o => `<a href="${esc(app.hashVon('ordner', o.id))}">${esc(ordnerName(o))}</a>`));
+    return `<nav class="pfad fokus-pfad" aria-label="Ordner"><ol>${teile.map(t => `<li>${t}</li>`).join('')}</ol></nav>`;
+  }
+  /* Nur bei Firma-Quests. Läuft der Timer hier: Taste, die „abrechenbar“ des laufenden Eintrags umschaltet.
+     Sonst: ruhiger Hinweis, wie der nächste Eintrag startet (Standard: mit Kunde abrechenbar). */
+  function abrechnung(quest, task, hier) {
+    if (!quest || !quest.firma) return '';
+    if (!hier) {
+      const kid = task ? task.kunde_id : null;
+      return `<p class="fokus-abr-info"><span class="abr-punkt${kid ? ' ist-abr' : ''}" aria-hidden="true"></span><span class="abr-text">Startet ${kid ? 'abrechenbar · ' + esc(kundeText(kid, task)) : 'intern'}</span></p>`;
+    }
+    const abr = !!hier.abrechenbar;
+    const text = abr ? 'Abrechenbar' + (hier.kunde_id ? ' · ' + kundeText(hier.kunde_id, task) : '') : 'Intern';
+    const sperre = Z().gesperrt(hier) ? 'Abgerechnet, nicht mehr änderbar' : !abr && !hier.kunde_id ? 'Ohne Kunde – intern' : null;
+    const tip = sperre || (abr ? 'Auf intern umschalten' : 'Auf abrechenbar umschalten');
+    return `<button class="abr-knopf${abr ? ' ist-abr' : ''} tip-unten" type="button" data-aktion="abr" aria-pressed="${abr}"${sperre ? ' aria-disabled="true"' : ''}
+      aria-label="${esc(text)}. ${esc(tip)}" data-tip="${esc(tip)}"><span class="abr-punkt" aria-hidden="true"></span><span class="abr-text">${esc(text)}</span></button>`;
+  }
+
   /* ---------- Darstellung ---------- */
   function leer(titel, text) {
     main.innerHTML = `<div class="seite fokus"><div class="leer fokus-leer"><strong>${esc(titel)}</strong><span>${esc(text)}</span>
@@ -72,7 +110,6 @@ window.LW = window.LW || {};
       return leer('Diese Aufgabe gibt es nicht mehr', 'Sie wurde gelöscht oder ist nicht mehr sichtbar.');
     }
     const quest = s.quests.find(q => q.id === (task ? task.quest_id : questId));
-    const kunde = task && task.kunde_id && (s.kunden.find(k => k.id === task.kunde_id) || {}).name;
     const titel = task ? task.titel : 'Ohne Aufgabe';
     const hier = laeuftHier();
     const fertig = !!(task && task.erledigt_am);
@@ -93,8 +130,9 @@ window.LW = window.LW || {};
       <div class="banner warn" data-zulange hidden><p>Der Timer läuft seit über 12 Stunden. Vergessen zu stoppen?</p>
         <button class="btn small" type="button" data-aktion="endzeit">Endzeit korrigieren</button></div>
       <section class="fokus-buehne" aria-labelledby="fokusTitel">
-        <p class="fokus-quest"><span class="dot" aria-hidden="true"></span>${esc(quest ? quest.name : '')}${kunde ? ` · ${esc(kunde)}` : ''}</p>
+        ${kopfPfad(quest, task)}
         <h1 class="fokus-titel" id="fokusTitel">${esc(titel)}</h1>
+        ${abrechnung(quest, task, hier)}
         <p class="fokus-label">Heute auf dieser Aufgabe</p>
         <div class="fokus-timer zahl" role="timer" aria-label="Heute auf dieser Aufgabe" data-timer>${L.formatTimer(summe(liste, jetzt))}</div>
         <p class="fokus-status${hier ? ' aktiv' : ''}">${status}</p>
@@ -159,6 +197,18 @@ window.LW = window.LW || {};
         app.rahmen();
         neuMitFokus('pause');
         if (vorher) toast('Timer für „' + vorher + '“ gestoppt');
+        app.abgleichen();
+      } else if (name === 'abr') {
+        const z = laeuftHier();
+        if (!z || Z().gesperrt(z) || (!z.abrechenbar && !z.kunde_id)) return; // gesperrt oder ohne Kunde: bleibt intern
+        const r = await guard(() => DB.saveZeit({ id: z.id, abrechenbar: !z.abrechenbar }));
+        if (!r) return;
+        const s = S();
+        if (s.laufend && s.laufend.id === z.id) s.laufend = { ...s.laufend, abrechenbar: !!r.abrechenbar };
+        const i = s.zeitenHeute.findIndex(x => x.id === z.id);
+        if (i >= 0) s.zeitenHeute[i] = { ...s.zeitenHeute[i], abrechenbar: !!r.abrechenbar };
+        if (nochDa()) neuMitFokus('abr');
+        toast(r.abrechenbar ? 'Laufender Eintrag ist abrechenbar' : 'Laufender Eintrag ist intern');
         app.abgleichen();
       } else if (name === 'erledigt') {
         if (!task || task.erledigt_am) return;
